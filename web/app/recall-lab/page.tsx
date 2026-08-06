@@ -9,9 +9,11 @@ import {
   CORPORA,
   fetchBenchmarkResults,
   fetchRecallRecords,
+  type BenchmarkDataState,
   type Strategy,
   type RecallRecord,
 } from "@/lib/api";
+import BenchmarkDataStatus from "@/components/BenchmarkDataStatus";
 
 type Verdict = "HIT" | "MISS" | "N/A";
 
@@ -33,6 +35,7 @@ function fmtMs(value: number | undefined): string {
 
 export default function RecallLabPage() {
   const [corpus] = useState(CORPORA[0]?.name ?? "longmemeval-s");
+  const [dataState, setDataState] = useState<BenchmarkDataState | null>(null);
   const [availableStrategies, setAvailableStrategies] = useState<string[]>([]);
   const [strategy, setStrategy] = useState<string>("");
   const [data, setData] = useState<{
@@ -46,8 +49,15 @@ export default function RecallLabPage() {
   // Populate strategy dropdown from the benchmark results so we only show
   // strategies that actually have a result file for this corpus.
   useEffect(() => {
-    fetchBenchmarkResults(corpus).then((rows) => {
-      const names = rows
+    fetchBenchmarkResults(corpus).then((dataState) => {
+      setDataState(dataState);
+      if (dataState.state === "unavailable") {
+        setAvailableStrategies([]);
+        setStrategy("");
+        setData(null);
+        return;
+      }
+      const names = dataState.rows
         .map((r) => r.strategy as string)
         .filter((n): n is string => typeof n === "string" && n.length > 0);
       // Keep declaration order from STRATEGIES so the dropdown is stable.
@@ -163,6 +173,15 @@ export default function RecallLabPage() {
           </p>
         )}
       </section>
+
+      {dataState?.state === "historical" && (
+        <BenchmarkDataStatus state="historical" snapshot={dataState.snapshot} />
+      )}
+
+      {dataState?.state === "unavailable" ? (
+        <BenchmarkDataStatus state="unavailable" message={dataState.message} />
+      ) : (
+        <>
 
       {measurable === false && (
         <section
@@ -308,6 +327,8 @@ export default function RecallLabPage() {
             })}
           </div>
         </section>
+      )}
+        </>
       )}
     </div>
   );

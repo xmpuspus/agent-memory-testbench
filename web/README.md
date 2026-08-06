@@ -16,7 +16,7 @@ npm install
 npx next dev -p 3001
 ```
 
-The dev server expects the FastAPI backend on port 8000 (or whatever `NEXT_PUBLIC_API_URL` points to). Without an API, pages fall back to `MOCK_BENCHMARK_DATA` from `lib/api.ts`.
+The dev server expects the FastAPI backend on port 8000 (or whatever `NEXT_PUBLIC_API_URL` points to). If benchmark data is unavailable or invalid, the dashboard shows an explicit unavailable state instead of substitute results. Historical snapshots are labeled with their snapshot metadata.
 
 ## Build the Static Bundle
 

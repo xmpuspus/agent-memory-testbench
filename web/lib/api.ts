@@ -193,16 +193,91 @@ export interface BenchmarkRow {
   accuracy_by_category?: Record<string, { accuracy: number; n: number }>;
 }
 
+export interface SnapshotInfo {
+  snapshot_id: string;
+  status: "historical" | "checked" | "partial" | "superseded" | "unavailable";
+  protocol_id: string;
+  question_count: number;
+}
+
+export type BenchmarkDataState =
+  | { state: "ready" | "historical"; rows: BenchmarkRow[]; snapshot: SnapshotInfo }
+  | { state: "unavailable"; message: string };
+
+const UNAVAILABLE_BENCHMARK_DATA: BenchmarkDataState = {
+  state: "unavailable",
+  message: "Benchmark data is unavailable.",
+};
+
+const SNAPSHOT_STATUSES: ReadonlySet<SnapshotInfo["status"]> = new Set<
+  SnapshotInfo["status"]
+>([
+  "historical",
+  "checked",
+  "partial",
+  "superseded",
+  "unavailable",
+]);
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function isSnapshotInfo(value: unknown): value is SnapshotInfo {
+  return (
+    isRecord(value) &&
+    typeof value.snapshot_id === "string" &&
+    typeof value.status === "string" &&
+    SNAPSHOT_STATUSES.has(value.status as SnapshotInfo["status"]) &&
+    typeof value.protocol_id === "string" &&
+    typeof value.question_count === "number"
+  );
+}
+
+function isNullableNumber(value: unknown): value is number | null {
+  return value === null || typeof value === "number";
+}
+
+function isBenchmarkRow(value: unknown): value is BenchmarkRow {
+  return (
+    isRecord(value) &&
+    typeof value.strategy === "string" &&
+    typeof value.accuracy === "number" &&
+    typeof value.mean_session_recall_at_k === "number" &&
+    (value.mean_session_hit_at_k === undefined ||
+      typeof value.mean_session_hit_at_k === "number") &&
+    typeof value.avg_recall_latency_ms === "number" &&
+    typeof value.total_cost_usd === "number" &&
+    isNullableNumber(value.abstention_f1) &&
+    typeof value.abstention_n === "number" &&
+    isNullableNumber(value.update_precision) &&
+    typeof value.update_n === "number" &&
+    isNullableNumber(value.temporal_correctness) &&
+    typeof value.temporal_n === "number"
+  );
+}
+
 export async function fetchBenchmarkResults(
   corpus: string = "longmemeval-s"
-): Promise<BenchmarkRow[]> {
+): Promise<BenchmarkDataState> {
   try {
     const res = await fetch(`${API_URL}/api/benchmark/${corpus}`);
-    if (!res.ok) return MOCK_BENCHMARK_DATA;
-    const data = await res.json();
-    return data.results?.length ? data.results : MOCK_BENCHMARK_DATA;
+    if (!res.ok) return UNAVAILABLE_BENCHMARK_DATA;
+    const data: unknown = await res.json();
+    if (!isRecord(data) || !Array.isArray(data.results) || data.results.length === 0) {
+      return UNAVAILABLE_BENCHMARK_DATA;
+    }
+    if (!isSnapshotInfo(data.snapshot) || data.snapshot.status === "unavailable") {
+      return UNAVAILABLE_BENCHMARK_DATA;
+    }
+    if (!data.results.every(isBenchmarkRow)) return UNAVAILABLE_BENCHMARK_DATA;
+    return {
+      state: data.snapshot.status === "historical" ? "historical" : "ready",
+      rows: data.results,
+      snapshot: data.snapshot,
+    };
   } catch {
-    return MOCK_BENCHMARK_DATA;
+    return UNAVAILABLE_BENCHMARK_DATA;
   }
 }
 
@@ -210,23 +285,6 @@ export interface Source {
   title: string;
   url?: string;
 }
-
-export const MOCK_BENCHMARK_DATA: BenchmarkRow[] = [
-  {
-    strategy: "naive_vector",
-    accuracy: 0.4,
-    mean_session_recall_at_k: 0.89,
-    avg_recall_latency_ms: 3548,
-    total_cost_usd: 0.087,
-    abstention_f1: null,
-    abstention_n: 0,
-    update_precision: null,
-    update_n: 0,
-    temporal_correctness: null,
-    temporal_n: 0,
-    questions_evaluated: 16,
-  },
-];
 
 // IR metrics computed by memory_arena.benchmark.recall_metrics. The dashboard
 // reads session_hit_at_k to render HIT/MISS in the Recall Lab.

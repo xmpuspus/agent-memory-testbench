@@ -8,9 +8,11 @@ import {
   CATEGORY_INFO,
   CORPORA,
   fetchBenchmarkResults,
+  type BenchmarkDataState,
   type BenchmarkRow,
   type Strategy,
 } from "@/lib/api";
+import BenchmarkDataStatus from "@/components/BenchmarkDataStatus";
 import InfoTip from "@/components/InfoTip";
 
 function pct(value: number | null | undefined): string {
@@ -36,13 +38,18 @@ type SortKey = "accuracy" | "recall" | "latency" | "cost" | "name";
 
 export default function BenchmarkPage() {
   const [corpus, setCorpus] = useState(CORPORA[0]?.name ?? "longmemeval-s");
-  const [rows, setRows] = useState<BenchmarkRow[]>([]);
+  const [dataState, setDataState] = useState<BenchmarkDataState | null>(null);
   const [sortKey, setSortKey] = useState<SortKey>("accuracy");
   const [sortDesc, setSortDesc] = useState<boolean>(true);
 
   useEffect(() => {
-    fetchBenchmarkResults(corpus).then(setRows);
+    fetchBenchmarkResults(corpus).then(setDataState);
   }, [corpus]);
+
+  const rows = useMemo<BenchmarkRow[]>(
+    () => (dataState && dataState.state !== "unavailable" ? dataState.rows : []),
+    [dataState]
+  );
 
   const sorted = useMemo(() => {
     const copy = [...rows];
@@ -140,6 +147,15 @@ export default function BenchmarkPage() {
           </span>
         </div>
       </section>
+
+      {dataState?.state === "historical" && (
+        <BenchmarkDataStatus state="historical" snapshot={dataState.snapshot} />
+      )}
+
+      {dataState?.state === "unavailable" ? (
+        <BenchmarkDataStatus state="unavailable" message={dataState.message} />
+      ) : (
+        <>
 
       <section className="space-y-4">
         <h2
@@ -344,6 +360,9 @@ export default function BenchmarkPage() {
           ))}
         </div>
       </section>
+
+        </>
+      )}
     </div>
   );
 }
