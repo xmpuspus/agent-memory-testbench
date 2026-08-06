@@ -43,7 +43,7 @@ Full decision tree and per-use-case matrix in [`docs/decision-guide.md`](docs/de
 
 > **One-liner:** *You don't need an agent-memory SDK to beat one. On this corpus a 30-line vector store tops every memory SDK, including Mem0 run on the exact same model.*
 
-1. **The top tier is entirely pure-Python, and every vendor SDK lands below it.** `hipporag2` (54.5%), `qiss` (50.5%), `persona_profile` (49.7%), `naive_vector` (49.2%), `reflection` (47.4%), and `raptor` (46.8%) cluster at the top with overlapping 95% CIs. The funded vendor SDKs all score lower: Mem0 at 31.4% (and we put it on the *exact same model* as the baselines, Claude Sonnet, so it isn't a model handicap), below even `bm25`; the graph vendors at ~23%. A 30-line ChromaDB script beats all of them. Leveling cuts both ways, and we measured it: putting Mem0 on Sonnet barely moved it (~3pp; its drop from a naive-default 51% is mostly a v1->v2 regression, ~16pp), while `langmem` *rose* +6pp on Sonnet to 33% (the top vendor, still below `bm25`). `graphiti` and `cognee` can't be cleanly leveled in one environment (documented in the [methodology note](#methodology-note-leveling-mem0s-generator)); they stay vendor-default ~26pp back regardless.
+1. **The top tier is entirely pure-Python, and every vendor SDK scores below it.** `hipporag2` (54.5%), `qiss` (50.5%), `persona_profile` (49.7%), `naive_vector` (49.2%), `reflection` (47.4%), and `raptor` (46.8%) cluster at the top with overlapping 95% CIs. The funded vendor SDKs all score lower: Mem0 at 31.4% (and we put it on the *exact same model* as the baselines, Claude Sonnet, so it isn't a model handicap), below even `bm25`; the graph vendors at ~23%. A 30-line ChromaDB script beats all of them. Leveling cuts both ways, and we measured it: putting Mem0 on Sonnet barely moved it (~3pp; its drop from a naive-default 51% is mostly a v1->v2 regression, ~16pp), while `langmem` *rose* +6pp on Sonnet to 33% (the top vendor, still below `bm25`). `graphiti` and `cognee` can't be cleanly leveled in one environment (documented in the [methodology note](#methodology-note-leveling-mem0s-generator)); they stay vendor-default ~26pp back regardless.
 2. **Pure-Python advanced retrievers don't separate from the simple vector store.** `hybrid_rrf` (~44%), `hyde` (~43%), `raptor` (~47%), and `reflection` (~47%) are all within ±5pp of plain `naive_vector` despite costing 1.5-8x more per run. At this sample size these are noise; worth re-checking on the full 500-question corpus.
 3. **The "I'll just stuff the whole conversation in" baseline is dead.** `full_context` scores 29.5% at $5.16/run; every retrieval strategy beats it for 1-50% of the cost. Long-context isn't a substitute for retrieval, even when the model can hold it.
 4. **Graph-shaped vendors (graphiti, cognee, karpathy_llm_wiki) underperform on this slice.** Both temporal-graph vendors land at ~23% and the LLM-maintained wiki at ~22%; about half of `naive_vector`. **This is a measurement boundary, not a verdict.** The smoke corpus contains only 4 multi-session-reasoning questions out of 16; graph approaches earn their write-time cost on multi-hop synthesis the v0.2 full corpus (500 questions, ~125 multi-session) will exercise. The graph-vs-vector head-to-head you actually want is in v0.2; treat the smoke numbers for graph systems as a lower bound on what the architecture can do.
@@ -115,10 +115,10 @@ We measured the confound directly instead of guessing at it (3-seed and
   about barely moves it.
 - **The version is the real story, ~16pp.** mem0 v2's OSS rewrite (which
   removed the graph store and consolidates facts more aggressively) scores
-  ~16pp lower than v1 on this haystack corpus, regardless of model. We
-  benchmark v2 because it is what `pip install 'memory-arena[mem0]'` gives
-  you today; pinning the deprecated v1 to keep a flattering 51% would test
-  software nobody installs.
+  ~16pp lower than v1 on this haystack corpus, regardless of model.
+  The `v0.1.8-bundled-historical` snapshot benchmarks v2 because that is what
+  `pip install 'memory-arena[mem0]'` installed for that snapshot. Pinning the
+  deprecated v1 to keep a flattering 51% would test software nobody installs.
 - **Cost** (~$0.05/run) counts only memory-arena's own generation calls;
   mem0's internal Sonnet extraction is not counted (footnote `‡`).
 
@@ -212,7 +212,8 @@ held constant across all strategies.
 > Cross-judge sanity check: re-grading 19 of the 20 strategies with
 > **GPT-4o** instead of Opus 4.7 gives **Spearman rho = +0.967** on the
 > ranks (see [`results/cross_judge_report.json`](results/cross_judge_report.json)).
-> The full 500-question LongMemEval-S lands in v0.2 with CI half-widths
+> The `v0.1.8-bundled-historical` snapshot planned the full 500-question
+> LongMemEval-S for v0.2, with CI half-widths
 > small enough to rank within tier 1. See [Statistical
 > methodology](#statistical-methodology) for the bootstrap recipe,
 > multiple-comparison handling, and known limits.
@@ -259,8 +260,8 @@ driver hits ~1.2%). FalkorDB's headline graph-query latency advantage does
 not surface end-to-end because the answer-generation LLM call dominates recall
 latency. No measurable FalkorDB win at this level of measurement.
 
-The vendor caveat: rows labeled `config-failed-at-default` (none in the
-current run) reflect a vendor's shipped default config breaking ingest at
+The vendor caveat: rows labeled `config-failed-at-default` (none in this
+snapshot) reflect a vendor's shipped default config breaking ingest at
 install time, not what the SDK can do when tuned. PRs that ship a working
 default for any vendor in that bucket are welcome, see
 [CONTRIBUTING.md](CONTRIBUTING.md). The table answers the question "what
@@ -271,7 +272,7 @@ not "what's the maximum each vendor SDK can achieve."
 
 The LongMemEval paper (Wu et al., ICLR 2025; Table 3) reports plain
 semantic-retrieval baselines on the M variant of the corpus. Their
-session-granularity vector retriever lands at **Recall@5 = 0.706** with
+session-granularity vector retriever reports **Recall@5 = 0.706** with
 **GPT-4o reader/judge accuracy = 0.670**. Our `naive_vector` on
 LongMemEval-S smoke gets **Recall@5 = 0.870** (we use the newer
 `text-embedding-3-large`) and **49.2% accuracy under Opus 4.7 as judge**.
@@ -483,17 +484,22 @@ docker compose --profile full up -d        # also brings up the api+web containe
 `MEM_ARENA_NEO4J_PASSWORD` is required, compose refuses to start
 without it. Generate one with `openssl rand -hex 16`.
 
-## Limitations
+## Historical v0.1.8 limitations and reproduction
+
+This section records the limits and smoke-run reproduction values from
+`v0.1.8-bundled-historical`.
+
+### Snapshot limitations
 
 - **Memori cloud quota.** Memori 3.x routes its augmentation runtime through a cloud quota service that 429s anonymous IPs after a few requests. Set `MEMORI_API_KEY` for full throughput.
 - **Full-context cost cap.** `full_context` always hits the cost cap on the smoke subset; bump `--cost-cap` to 25+ to evaluate all 16 questions.
-- **Statistical power.** N=16 questions across 3 seeds yields a CI half-width of ~18 pp on accuracy. Top-of-table rankings are statistically tied; the gap to `recency_window` and `bm25` is real. A 500-question variant lands in v0.2.
+- **Statistical power.** N=16 questions across 3 seeds yields a CI half-width of ~18 pp on accuracy. Top-of-table rankings are statistically tied; the gap to `recency_window` and `bm25` is real. The snapshot planned a 500-question variant for v0.2.
 - **Single generator.** Sonnet 4.6 runs the recall-step generation for every strategy that does not pin its own (vendor SDKs use their own internals). A robustness sweep across generators is implemented in [`scripts/robustness.py`](scripts/robustness.py); results to be added in v0.2.
 - **Single judge.** Opus 4.7 grades every answer; a 19-way cross-judge with GPT-4o yields Spearman ρ = +0.967 on the ranks (same order, GPT-4o more lenient in absolute terms). See [`results/cross_judge_report.json`](results/cross_judge_report.json).
 
-## Verify our numbers in 5 minutes
+### Reproduce the historical v0.1.8 smoke subset
 
-Don't trust the bundled snapshot, verify it. With `OPENAI_API_KEY` and
+To reproduce `v0.1.8-bundled-historical`, use `OPENAI_API_KEY` and
 `ANTHROPIC_API_KEY` exported and the corpus already ingested, run:
 
 ```bash
@@ -501,7 +507,7 @@ memory-arena benchmark --corpus longmemeval-s \
   --strategy 'naive_vector,bm25' --seed 0 --top-k 5 --cost-cap 1
 ```
 
-Expected (~5 min wall, ~$0.50 spend, single seed):
+Expected values for `v0.1.8-bundled-historical` (~5 min wall, ~$0.50 spend, single seed):
 
 | Strategy        | Accuracy | Recall@5 |
 | --------------- | -------- | -------- |
