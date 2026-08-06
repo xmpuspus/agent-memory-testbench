@@ -376,6 +376,27 @@ def arena(
     serve(host=host, port=port)
 
 
+def _demo_banner_lines(port: int) -> list[str]:
+    """The lines the demo prints on start.
+
+    The demo is the one command a reader runs before they trust anything, so
+    the banner states what it serves and what it does not need. Both claims are
+    checked: the snapshot id comes from the bundled manifest, and the demo runs
+    with no provider key and no container.
+    """
+    from memory_arena.evidence.bundled import load_snapshot_manifest
+    from memory_arena.paths import results_root
+
+    manifest = load_snapshot_manifest(results_root())
+    snapshot = manifest.get("snapshot_id") or "no bundled snapshot"
+    status = manifest.get("status", "unavailable")
+    return [
+        f"dashboard at http://127.0.0.1:{port}/",
+        f"serving snapshot {snapshot} ({status})",
+        "Inspect the evidence locally. No API key. No Docker.",
+    ]
+
+
 @app.command()
 def demo(
     host: str = typer.Option("127.0.0.1", "--host", help="Host to bind to (default 127.0.0.1)"),
@@ -401,7 +422,8 @@ def demo(
     actual_port = _pick_free_port(port if port != 0 else 0)
 
     _warn_if_lan_bind(host)
-    console.print(f"dashboard at http://127.0.0.1:{actual_port}/")
+    for line in _demo_banner_lines(actual_port):
+        console.print(line)
 
     def _open():
         webbrowser.open(f"http://127.0.0.1:{actual_port}/")

@@ -49,6 +49,28 @@ def load_bundled_manifest(results_dir: Path) -> dict:
         return _unavailable_manifest("manifest is invalid")
 
 
+def packaged_snapshot_dir() -> Path:
+    """The snapshot directory that ships inside the package."""
+    return Path(__file__).resolve().parents[1] / "data" / "results_snapshot"
+
+
+def load_snapshot_manifest(results_dir: Path) -> dict:
+    """The manifest for `results_dir`, or the packaged one when it has none.
+
+    A checkout keeps a working `results/` directory that holds every run ever
+    made and no manifest, so a local reader would see `unavailable` while the
+    installed wheel shows the snapshot. Fall back to the packaged copy, which
+    is the same snapshot the wheel serves.
+    """
+    manifest = load_bundled_manifest(results_dir)
+    if manifest.get("status") != "unavailable":
+        return manifest
+    packaged = packaged_snapshot_dir()
+    if packaged.resolve() == results_dir.resolve():
+        return manifest
+    return load_bundled_manifest(packaged)
+
+
 def validate_manifest_inventory(manifest: dict, results_dir: Path) -> list[str]:
     """Return sorted strategy names that differ between a manifest and summaries."""
     corpus = manifest.get("corpus")

@@ -42,6 +42,60 @@ class TestCLIHelp:
         assert result.exit_code == 0
 
 
+class TestRegisteredCommands:
+    """A helper placed between a decorator and its function steals the command.
+
+    That happened to `demo`, and the whole suite stayed green while the one
+    command the README tells a reader to run was gone.
+    """
+
+    EXPECTED = {
+        "arena",
+        "benchmark",
+        "build-memory",
+        "demo",
+        "download-longmemeval",
+        "health",
+        "ingest-sessions",
+        "init-corpus",
+        "recall-lab",
+        "report",
+        "serve",
+    }
+
+    def test_every_documented_command_is_registered(self):
+        registered = {
+            (c.name or c.callback.__name__).replace("_", "-") for c in app.registered_commands
+        }
+
+        assert self.EXPECTED <= registered
+
+    def test_no_private_helper_is_registered_as_a_command(self):
+        registered = {
+            (c.name or c.callback.__name__).replace("_", "-") for c in app.registered_commands
+        }
+
+        assert [n for n in registered if n.startswith("_")] == []
+
+    def test_demo_runs_and_reports_its_own_help(self):
+        result = CliRunner().invoke(app, ["demo", "--help"])
+
+        assert result.exit_code == 0
+        assert "--port" in result.stdout
+
+
+class TestDemoBanner:
+    def test_the_banner_names_the_snapshot_and_the_keyless_promise(self):
+        """The demo start line is the recording's first and last beat."""
+        from memory_arena.cli import _demo_banner_lines
+
+        joined = " ".join(_demo_banner_lines(8000))
+
+        assert "http://127.0.0.1:8000/" in joined
+        assert "v0.1.8-bundled-historical" in joined
+        assert "Inspect the evidence locally. No API key. No Docker." in joined
+
+
 class TestInitCorpus:
     def test_creates_directory(self, tmp_path, monkeypatch):
         monkeypatch.chdir(tmp_path)
