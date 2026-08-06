@@ -1,4 +1,4 @@
-"""Memory Arena CLI — multi-stage pipeline.
+"""Agent Memory Testbench CLI — multi-stage pipeline.
 
 init-corpus -> ingest-sessions -> build-memory -> benchmark -> report -> serve
 
@@ -17,7 +17,8 @@ from rich.logging import RichHandler
 app = typer.Typer(
     name="memory-arena",
     help=(
-        "Benchmark agent-memory architectures: Mem0, Graphiti, Cognee, "
+        "Agent Memory Testbench (formerly Memory Arena): benchmark agent-memory "
+        "architectures: Mem0, Graphiti, Cognee, "
         "LangMem, Memori, naive vector, recency window, full context."
     ),
     no_args_is_help=True,
@@ -286,7 +287,7 @@ def report(
         sys.stdout.write(json.dumps(rows, indent=2) + "\n")
         return
 
-    console.print(f"[bold]Memory Arena Report: {corpus}[/bold]")
+    console.print(f"[bold]Agent Memory Testbench Report: {corpus}[/bold]")
     for row in rows:
         f1 = row.get("abstention_f1")
         f1_str = f"{f1:.2f}" if f1 is not None else "—"
@@ -432,7 +433,7 @@ def health(fmt: str = typer.Option("rich", "--format", help="rich | json")):
         sys.stdout.write(json.dumps(state, indent=2) + "\n")
         return
 
-    console.print("[bold]Memory Arena Health[/bold]")
+    console.print("[bold]Agent Memory Testbench Health[/bold]")
     console.print(f"  Anthropic key: {'set' if state['api_keys']['anthropic'] else 'missing'}")
     console.print(f"  OpenAI key:    {'set' if state['api_keys']['openai'] else 'missing'}")
     console.print(f"  Strategies:    {', '.join(state['strategies_registered'])}")

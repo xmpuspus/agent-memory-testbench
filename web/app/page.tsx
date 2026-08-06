@@ -55,10 +55,10 @@ export default function Home() {
     <div className="max-w-5xl mx-auto px-6 py-12 space-y-16">
       <section className="space-y-4">
         <h1 className="text-3xl font-bold tracking-tight" style={{ color: "var(--foreground)" }}>
-          Memory Arena
+          Agent Memory Testbench
         </h1>
         <p className="text-lg leading-relaxed max-w-3xl" style={{ color: "var(--muted)" }}>
-          Which memory architecture works best for your agent? Sixteen
+          Formerly Memory Arena. Which memory architecture works best for your agent? Sixteen
           systems (Mem0, Graphiti, Cognee, LangMem, Memori, plus
           pure-Python baselines and advanced retrievers like HyDE, RAPTOR,
           Reflection, and Karpathy&apos;s LLM Wiki) run on the same
@@ -123,7 +123,7 @@ export default function Home() {
             {
               step: "3",
               title: "Honest cost",
-              desc: "Ingest-side LLM calls (entity extraction, summarization) are tracked separately from recall cost. Most vendor numbers hide ingest cost. Memory Arena does not.",
+              desc: "Ingest-side LLM calls (entity extraction, summarization) are tracked separately from recall cost. Most vendor numbers hide ingest cost. Agent Memory Testbench does not.",
             },
           ].map((item) => (
             <div

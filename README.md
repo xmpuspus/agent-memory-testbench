@@ -1,68 +1,45 @@
-# Memory Arena
+# Agent Memory Testbench
 
-![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue) ![Pydantic v2](https://img.shields.io/badge/pydantic-v2-green) ![License](https://img.shields.io/badge/license-MIT-blue) ![Tests](https://img.shields.io/badge/tests-362-brightgreen) ![Strategies](https://img.shields.io/badge/strategies-20-blueviolet)
+Formerly Memory Arena
 
-**A 30-line vector store beats every funded agent-memory SDK on the same eval. None of them is close to solving the problem.**
+**Benchmark agent memory from retrieval to answer.**
 
-*Memory Arena is an open-source harness that runs 20 memory strategies through one lifecycle, one judge, one model, fully reproducible. Run it yourself, add your own strategy, or PR a vendor's tuned config and I'll re-run it.*
+Compare memory architectures, trace where answers fail, and rerun versioned evidence from one open testbench.
 
-> **What this is.** Memory Arena runs 20 agent-memory strategies through
-> the same `setup -> ingest -> recall -> teardown` lifecycle against
-> the same chat-session corpus (LongMemEval-S smoke), judged by the
-> same model (Claude Opus 4.7), with the same `top_k`. Six are vendor
-> SDKs at their documented defaults (Mem0, Graphiti,
-> Graphiti-on-FalkorDB, Cognee, LangMem, Memori). Twelve are pure-Python
-> baselines and retrievers (vector, BM25, RRF, HyDE, RAPTOR, Reflection,
-> Persona Profile, Karpathy's LLM Wiki, A-MEM, HippoRAG 2, full-context,
-> recency window). Two are quantum rerankers over the same vector store
-> (QISS, a pure-NumPy fidelity reranker; SQR, a Qiskit Aer SWAP-test
-> reranker). Each result JSON is stamped with commit SHA, package
-> versions, model IDs, and seed, so anyone can re-run and bisect.
->
-> **What it isn't.** Not vendor-tuned. Not a single-judge truth
-> (19-way Opus-vs-GPT-4o cross-judge Spearman is +0.967; GPT-4o runs
-> more lenient in absolute terms but agrees on the ranking). Not a large-N study (the smoke subset is 16
-> questions; the v0.2 full LongMemEval-S brings 500). Read [What this
-> benchmark does NOT claim](#what-this-benchmark-does-not-claim)
-> before quoting the numbers.
+Planned Pages address: `https://xmpuspus.github.io/agent-memory-testbench/`
 
-<p align="center">
-  <img src="docs/showcase.png" alt="20 agent-memory systems ranked by accuracy; every funded vendor SDK falls below a 30-line vector store">
-</p>
+No provider keys are needed to inspect the bundled historical evidence:
 
-<p align="center"><sub><b>20 systems, one eval.</b> Sorted by accuracy under the Opus judge. The funded vendor SDKs (coral) all land below `naive_vector`, a 30-line ChromaDB script; `mem0` and `langmem` run on the <i>same model</i> as the baselines, so it isn't a model handicap. Opus is a strict judge: GPT-4o grades these ~15pp higher with +0.967 rank agreement. Even the leader gets ~half right, memory is an open problem, not a shipped feature.</sub></p>
+```bash
+pip install memory-arena
+memory-arena demo
+```
 
-<p align="center">
-  <img src="docs/hero.png" alt="Pareto frontier, accuracy vs cost across the agent-memory strategies">
-</p>
+> **Bundled evidence:** `v0.1.8-bundled-historical` is a historical snapshot. It does not publish a current benchmark ranking.
 
-<p align="center"><sub><b>The cost view.</b> Accuracy vs cost (log scale). The cheap pure-Python retrievers (navy) own the frontier; the vendor SDKs (coral) and full_context (grey) are <i>both</i> worse and no cheaper once you count their internal calls. <i>qiss lands next to naive_vector: it reranks the same candidates by cosine-squared fidelity, which reorders retrieval a little but doesn't move accuracy past noise; sqr trails. Why, in [`docs/quantum-and-compression.md`](docs/quantum-and-compression.md).</i></sub></p>
+## Historical bundled evidence: v0.1.8-bundled-historical
 
-<p align="center">
-  <img src="docs/taxonomy.png" alt="Agent-memory taxonomy, write-time vs read-time computation × storage representation">
-</p>
+The following results, charts, method, and guidance are kept for reference from the bundled historical snapshot. They are not a current ranking.
 
-<p align="center"><sub>The 20 strategies placed in one design space. <i>X-axis: when computation happens (read-time → write-time). Y-axis: representation (raw text → vectors → derived facts → graph).</i> The pattern: tier-1 accuracy spans the whole grid, no single quadrant wins.</sub></p>
-
-## Rule of thumb: which agent memory should you use?
+### Rule of thumb: which agent memory should you use?
 
 **Start with a plain vector store. Spend your effort on how the model reasons over what it retrieves, not on a fancier index. Reach for a graph only when plain vectors actually fail, which here was time-aware questions. The expensive SDKs don't beat the free baseline.**
 
 <p align="center">
-  <img src="docs/reasoning-gap.png" alt="Per strategy: an accuracy bar and a recall@5 marker. Every top retriever finds the right memory 80-92% of the time but answers correctly only about half; the gap is reasoning, not retrieval">
+  <img src="docs/reasoning-gap.png" alt="Historical chart: top retrievers found the right memory 80-92% of the time but answered correctly about half the time.">
 </p>
 
-<p align="center"><sub><b>Why this is the rule.</b> Each bar is how often the answer is correct; each diamond is how often the right memory was actually retrieved (recall@5). Every top retriever <i>finds</i> the memory 80-92% of the time but <i>answers</i> correctly only about half. That gap is reasoning, not retrieval, which is why a 30-line vector store is enough and a fancier index or a funded SDK doesn't close it. <code>full_context</code> doesn't even retrieve (it stuffs the whole conversation) and costs the most.</sub></p>
+<p align="center"><sub><b>Historical interpretation.</b> Each bar shows answer accuracy. Each diamond shows recall@5. Top retrievers found the right memory 80-92% of the time. They answered correctly about half the time. The historical snapshot links the gap to reasoning, not retrieval.</sub></p>
 
-1. **Default to a plain vector store** (embed each turn, top-k cosine, ~30 lines). It beat every funded SDK here and costs almost nothing.
-2. **Fix the reasoning, not the retrieval.** The right memory gets found 85-92% of the time; the model uses it correctly only ~half the time. A better answer prompt beats a fancier retriever.
-3. **Reach for a graph only where plain vectors actually fail: temporal questions.** On time-aware "when did X happen" queries every vector method collapsed (4-15%) and a from-scratch HippoRAG 2 recovered about half (~60%, consistent across seeds, at ~10x the cost). On multi-session reasoning the vector store actually won (75% vs 58%), so "graphs for multi-hop" is a theory this 16-question corpus can't confirm; v0.2 will.
-4. **Pay a vendor SDK for managed infra, not accuracy.** On the same model, Mem0 / Graphiti / Cognee / LangMem didn't beat the free baseline. The convenience (extraction, updates, hosting) is real; the accuracy bump isn't.
-5. **Never just stuff the whole conversation into context.** `full_context` is the worst trade on the board: most expensive, and lower accuracy than a cheap retriever.
+1. **Default to a plain vector store** (embed each turn, top-k cosine, ~30 lines). It beat every funded SDK in this snapshot. It cost little.
+2. **Fix the reasoning, not the retrieval.** The right memory was found 85-92% of the time. The model used it correctly about half the time. A better answer prompt beat a fancier retriever.
+3. **Use a graph where plain vectors failed on temporal questions.** Vector methods scored 4-15%. HippoRAG 2 recovered about half, at about 10x the cost. The vector store scored 75% on multi-session reasoning. HippoRAG 2 scored 58%. This 16-question snapshot could not confirm a graph advantage for multi-hop reasoning.
+4. **Pay a vendor SDK for managed infrastructure, not accuracy.** In this snapshot, Mem0, Graphiti, Cognee, and LangMem did not beat the free baseline. Their extraction, update, and hosting features can still help.
+5. **Do not put the whole conversation into context by default.** In this snapshot, `full_context` cost the most and had lower accuracy than a cheap retriever.
 
 Full decision tree and per-use-case matrix in [`docs/decision-guide.md`](docs/decision-guide.md).
 
-## What's interesting in the data
+### What's interesting in the data
 
 > **One-liner:** *You don't need an agent-memory SDK to beat one. On this corpus a 30-line vector store tops every memory SDK, including Mem0 run on the exact same model.*
 
@@ -79,7 +56,7 @@ Full decision tree and per-use-case matrix in [`docs/decision-guide.md`](docs/de
 
 <p align="center"><sub><b>Pairwise significance heatmap.</b> Read row "A" vs column "B": navy = A beats B with 95% bootstrap CI excluding 0; coral = B beats A; white = statistical tie. The white block in the upper-left is the "tier 1 is tied" claim, visually verified.</sub></p>
 
-## What this benchmark does NOT claim
+### Limits of the historical snapshot
 
 - **Not "vendor SDK X is bad."** We report vendor-default behavior on a single corpus. A tuned config is a separate measurement; vendor PRs are explicitly invited (see [Vendors: PR your tuned config](#vendors-pr-your-tuned-config)).
 - **Not "the top tier is equivalent."** N=16 makes 95% CIs wide; we report a statistical *tie* at this sample size, not equivalence. The full LongMemEval-S (500 questions) ships in v0.2 with CIs tight enough to rank within tier 1.
@@ -90,7 +67,7 @@ Full decision tree and per-use-case matrix in [`docs/decision-guide.md`](docs/de
 - **Not "this generalizes to all memory workloads."** Chat sessions are one slice; tool-use traces, codebases, and long documents are not in scope.
 - **Not "rank N vs N+1 is meaningful at the smoke scale."** With 20 benchmarked strategies pairwise-compared on 7 metrics, family-wise error rates require Benjamini-Hochberg correction (queued for v0.2 alongside the paired bootstrap). Treat within-tier ranks as unordered.
 
-## Configurations
+### Configurations
 
 Vendor-default everywhere except where flagged. `top_k=5` held constant across all strategies for the headline run. Same OpenAI `text-embedding-3-large` (3072 dims) for every embedding-based strategy. Same Anthropic `claude-sonnet-4-6` for the recall-step generator unless the SDK pins its own. Same Anthropic `claude-opus-4-7` as the LLM judge.
 
@@ -113,7 +90,7 @@ Vendor-default everywhere except where flagged. `top_k=5` held constant across a
 | `langmem` | 5 | text-embedding-3-large | sonnet-4-6 | opus-4-7 | vendor | LangGraph `InMemoryStore` + `create_memory_store_manager(anthropic:claude-sonnet-4-6)`, **leveled to the harness**. |
 | `memori` | 5 | vendor-internal (cloud) | gpt-4o-mini | opus-4-7 | vendor | Memori 3.x augmentation runtime owns embedding internally; we cannot pin it to ours. Without `MEMORI_API_KEY` the augmentation is throttled near zero. |
 
-### Methodology note: leveling mem0's generator
+#### Methodology note: leveling mem0's generator
 
 A clean comparison routes every strategy's internal LLM calls through the
 same model so the only variable is the memory architecture. Older runs of
@@ -157,7 +134,7 @@ leaderboard entirely: v2 removed the OSS graph store, so it can only run on
 the deprecated v1 + gpt-4o-mini, and graph memory is already covered by
 `graphiti`.
 
-### Statistical methodology
+#### Statistical methodology
 
 - **Bootstrap.** For strategies with 3 seeds, we compute the per-seed
   per-question accuracy, then resample question IDs with replacement
@@ -215,7 +192,7 @@ The dashboard lives at `http://localhost:8000/`. Three pages: Home (20 strategy 
 
 ---
 
-## Real benchmark numbers
+### Real benchmark numbers
 
 LongMemEval-S smoke subset: **16 questions across 4 categories**: 4
 questions each from `information_extraction`, `multi_session_reasoning`,
@@ -290,7 +267,7 @@ default for any vendor in that bucket are welcome, see
 does memory-arena measure when I run the documented install command?",
 not "what's the maximum each vendor SDK can achieve."
 
-### Sanity check vs the LongMemEval paper
+#### Sanity check vs the LongMemEval paper
 
 The LongMemEval paper (Wu et al., ICLR 2025; Table 3) reports plain
 semantic-retrieval baselines on the M variant of the corpus. Their
@@ -304,7 +281,7 @@ Spearman rho = +0.967 on the ranks (GPT-4o more lenient, same order). The underl
 anything, slightly better than the paper's because of the newer
 embedding model.
 
-### Dig deeper
+#### Dig deeper
 
 | Want… | Read |
 |-------|------|
@@ -315,7 +292,7 @@ embedding model.
 | Do the quantum strategies beat cosine? (no, and why) | [`docs/quantum-and-compression.md`](docs/quantum-and-compression.md): root cause, literature, and the compression cost frontier |
 | Vendor SDK pin reasons + breakages | [`docs/vendor-pins.md`](docs/vendor-pins.md) |
 
-## How memory-arena measures
+### How memory-arena measures
 
 Every strategy goes through the same lifecycle:
 
@@ -327,7 +304,7 @@ Same OpenAI `text-embedding-3-large` for vectors that need them. Same
 Anthropic Sonnet 4.6 for generation. Same Anthropic Opus 4.7 for the
 LLM judge.
 
-### The 7-axis evaluator
+#### The 7-axis evaluator
 
 1. **Structural**, `must_mention`, `must_not_claim`, `max_tokens`
 2. **Sources**, at least one labeled `supporting_session_id` retrieved
@@ -340,9 +317,9 @@ LLM judge.
    abstention category (returns null across all rows). The v0.2
    sweep restores 4 abstention questions per seed.
 
-### The 20 strategies
+#### The 20 strategies
 
-#### Pure-Python baselines and retrievers
+##### Pure-Python baselines and retrievers
 
 | Strategy             | Backing                  | Notes                                                 |
 | -------------------- | ------------------------ | ----------------------------------------------------- |
@@ -359,7 +336,7 @@ LLM judge.
 | `amem`               | local Chroma             | A-MEM (NeurIPS 2025): LLM-authored memory notes with a periodic link-evolution pass. |
 | `hipporag2`          | networkx                 | HippoRAG 2 (ICML 2025): open-IE triples plus personalized PageRank over an entity graph. |
 
-#### Quantum rerankers (over `naive_vector`)
+##### Quantum rerankers (over `naive_vector`)
 
 Both coarse-retrieve `top_k x fanout` candidates from `naive_vector`'s Chroma
 index, then rerank by a quantum-state fidelity. They share the vector store, so
@@ -370,7 +347,7 @@ the retrieval substrate is identical and only the reranking math differs.
 | `qiss`   | local Chroma + NumPy     | Quantum-Inspired Semantic Similarity. Reranks by fidelity Tr(rho_q rho_d) = cosine squared. Pure NumPy, no new deps; optional multi-query superposition adds interference cross-terms. |
 | `sqr`    | local Chroma + Qiskit Aer | Simulated Quantum Reranker. SWAP-test circuit on the Aer simulator (exact statevector); embeddings PCA-reduced to 2^n_qubits dims and amplitude-encoded. Needs `pip install 'memory-arena[quantum]'`. |
 
-#### Vendor SDKs
+##### Vendor SDKs
 
 | Strategy           | Backing                       | Notes                                            |
 | ------------------ | ----------------------------- | ------------------------------------------------ |
@@ -381,7 +358,7 @@ the retrieval substrate is identical and only the reranking math differs.
 | `langmem`          | LangGraph InMemoryStore       | `create_memory_store_manager(anthropic:claude-sonnet-4-6)`, leveled; text-embedding-3-large. |
 | `memori`           | Postgres                      | SQL-native, augmentation pipeline. Cloud-quota throttled without `MEMORI_API_KEY`. |
 
-## Quick start (local)
+### Quick start (local)
 
 ```bash
 git clone https://github.com/xmpuspus/memory-arena
@@ -432,7 +409,7 @@ Every result JSON is stamped with the commit SHA, installed package
 versions, model IDs, host info, and seed under `metadata`. If your
 numbers differ from the published table, post the diff and we'll bisect.
 
-## Why this exists
+### Why this exists
 
 A simple chart someone can send when asked "which memory SDK should I
 pick?" Vendor benchmarks are vendor-tuned, academic benchmarks are
@@ -440,7 +417,7 @@ corpus-tuned, and the rankings flip every quarter. Memory Arena is the
 apples-to-apples version: same lifecycle, same eval, same configs, every
 strategy run end-to-end with real LLM calls.
 
-## Bring your own corpus
+### Bring your own corpus
 
 Memory Arena reads any chat-session corpus that fits the schema:
 
@@ -463,7 +440,7 @@ Drop normalized JSONL into
 `datasets/<your-corpus>/processed/sessions.jsonl` and YAML question
 files into `datasets/<your-corpus>/questions/smoke/`.
 
-## Project structure
+### Project structure
 
 - `memory_arena/strategies/`, 20 strategies, all subclass `MemoryStrategy`
 - `memory_arena/sessions/`, corpus loaders (LongMemEval today)
@@ -487,7 +464,7 @@ files into `datasets/<your-corpus>/questions/smoke/`.
 - `web/`, Next.js 14 dashboard source (`cd web && npx next build && cp -R out/* ../memory_arena/static/`)
 - `tests/`: 362 tests, mock-based, no live API calls
 
-## Conventions
+### Conventions
 
 - **Functions:** snake_case
 - **Classes:** PascalCase
@@ -496,7 +473,7 @@ files into `datasets/<your-corpus>/questions/smoke/`.
 - **CLI:** Typer + Rich
 - **Async:** every strategy method is async; the runner is a single `asyncio.gather` across strategies
 
-## Compose profiles
+### Compose profiles
 
 ```bash
 docker compose up -d neo4j postgres        # baseline (graphiti, memori backends)
@@ -506,7 +483,7 @@ docker compose --profile full up -d        # also brings up the api+web containe
 `MEM_ARENA_NEO4J_PASSWORD` is required, compose refuses to start
 without it. Generate one with `openssl rand -hex 16`.
 
-## Limitations
+### Limitations
 
 - **Memori cloud quota.** Memori 3.x routes its augmentation runtime through a cloud quota service that 429s anonymous IPs after a few requests. Set `MEMORI_API_KEY` for full throughput.
 - **Full-context cost cap.** `full_context` always hits the cost cap on the smoke subset; bump `--cost-cap` to 25+ to evaluate all 16 questions.
@@ -514,7 +491,7 @@ without it. Generate one with `openssl rand -hex 16`.
 - **Single generator.** Sonnet 4.6 runs the recall-step generation for every strategy that does not pin its own (vendor SDKs use their own internals). A robustness sweep across generators is implemented in [`scripts/robustness.py`](scripts/robustness.py); results to be added in v0.2.
 - **Single judge.** Opus 4.7 grades every answer; a 19-way cross-judge with GPT-4o yields Spearman ρ = +0.967 on the ranks (same order, GPT-4o more lenient in absolute terms). See [`results/cross_judge_report.json`](results/cross_judge_report.json).
 
-## Verify our numbers in 5 minutes
+### Verify our numbers in 5 minutes
 
 Don't trust the bundled snapshot, verify it. With `OPENAI_API_KEY` and
 `ANTHROPIC_API_KEY` exported and the corpus already ingested, run:
@@ -534,7 +511,7 @@ Expected (~5 min wall, ~$0.50 spend, single seed):
 If your numbers fall outside that envelope, please open an issue with
 the result JSON attached, we'll bisect.
 
-## Vendors: PR your tuned config
+### Vendors: PR your tuned config
 
 The table reports each vendor at its **documented default**. If your
 SDK ships with a recommended config that beats the default, open a PR
@@ -549,14 +526,14 @@ We re-run the bench against the new config and merge if the gain is
 real and reproducible. The PR template walks through every required
 field: see [`.github/PULL_REQUEST_TEMPLATE.md`](.github/PULL_REQUEST_TEMPLATE.md).
 
-## FAQ
+### FAQ
 
 Common objections (small N, single judge, vendor defaults vs tuned,
 why memori is at 1%, etc.) are answered in [`docs/FAQ.md`](docs/FAQ.md).
 Read that before opening an issue, most of what you'd ask is already
 addressed there.
 
-## About the author
+### About the author
 
 I'm [Xavier Puspus](https://github.com/xmpuspus), an AI engineering lead.
 I built Memory Arena because I needed to choose a memory store for an
@@ -570,7 +547,7 @@ full LongMemEval corpus, cross-judges, and tuned vendor configs in v0.2 -
 the methodology is open, the result JSONs are stamped, and PRs from
 vendors are explicitly invited.
 
-## Strategies and benchmarks not yet covered
+### Strategies and benchmarks not yet covered
 
 The arena is intentionally narrow at v0.1.8. These are the directions queued for v0.2 and beyond, with paper / repo links so readers can follow the source:
 
@@ -578,7 +555,7 @@ The arena is intentionally narrow at v0.1.8. These are the directions queued for
 - **Mem0+Graph (`mem0g`)** is excluded from the leaderboard: mem0 v2.0.0 removed the OSS graph store, so it can only run on the deprecated v1 + gpt-4o-mini. Graph memory is covered by `graphiti`; the strategy stays in the repo for anyone pinning mem0 v1.
 - **MemoryAgentBench** (ICLR 2026), [arxiv 2507.05257](https://arxiv.org/abs/2507.05257). Defines a 4-competency taxonomy (accurate retrieval, test-time learning, long-range understanding, conflict resolution) the field is converging on. v0.2 will map memory-arena's 7 axes onto it.
 
-## Roadmap
+### Roadmap
 
 Tracked in detail in [`STATUS.md`](STATUS.md#next-steps-v02). Headline items for v0.2:
 
@@ -592,7 +569,7 @@ Tracked in detail in [`STATUS.md`](STATUS.md#next-steps-v02). Headline items for
 8. Benjamini-Hochberg q-values for the pairwise matrix (paired-bootstrap groundwork landed; q-value column queued for v0.2).
 9. Multi-generator robustness sweep (`scripts/robustness.py`) results published.
 
-## References
+### References
 
 The strategies and methodology in Memory Arena build directly on prior
 work. The full machine-readable list is in
@@ -643,7 +620,7 @@ work. The full machine-readable list is in
   Introduction to the Bootstrap*. Chapman and Hall / CRC, 1993. The
   resampling procedure under the accuracy + paired-bootstrap CIs.
 
-## Cite
+### Cite
 
 If you use Memory Arena in research or a blog post, cite via
 [`CITATION.cff`](CITATION.cff). LongMemEval (the underlying corpus) should
@@ -667,7 +644,7 @@ be cited separately:
 }
 ```
 
-## License
+### License
 
 MIT. Vendor SDKs are pinned per their own licenses. The bundled
 LongMemEval-S smoke subset is derived from

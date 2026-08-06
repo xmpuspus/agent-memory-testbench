@@ -15,6 +15,12 @@ class TestCLIHelp:
         assert result.exit_code == 0
         assert "memory-arena" in result.output
 
+    def test_root_help_uses_public_display_name(self):
+        result = runner.invoke(app, ["--help"])
+
+        assert result.exit_code == 0
+        assert "Agent Memory Testbench (formerly Memory Arena)" in result.output
+
     def test_init_corpus_help(self):
         result = runner.invoke(app, ["init-corpus", "--help"])
         assert result.exit_code == 0
@@ -56,7 +62,7 @@ class TestHealth:
     def test_health_runs(self):
         result = runner.invoke(app, ["health"])
         assert result.exit_code == 0
-        assert "Memory Arena" in result.output
+        assert "Agent Memory Testbench" in result.output
 
     def test_health_json_format(self):
         result = runner.invoke(app, ["health", "--format", "json"])
