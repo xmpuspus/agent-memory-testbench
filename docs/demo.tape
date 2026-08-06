@@ -1,41 +1,30 @@
-Output "docs/demo.gif"
+# Terminal half of the README recording.
+#
+# docs/record_demo.sh substitutes __VENV_BIN__ and __WORKDIR__ for a throwaway
+# virtual environment that holds only the built wheel, then runs vhs on the
+# result. The paths never reach a committed file and never reach a visible
+# frame: the setup runs inside Hide, and the working directory is a temporary
+# one, so no home directory or checkout path appears on screen.
 
-Set FontSize 18
-Set Width 1280
-Set Height 720
-Set Padding 24
+Output "__WORKDIR__/terminal.mp4"
+
+Set FontSize 20
+Set Width 960
+Set Height 540
+Set Padding 20
 Set Theme "Atom"
 Set Shell zsh
 
-# vhs starts a fresh shell where the venv isn't on PATH. Activate first so
-# `memory-arena` resolves. The activate is hidden so the very first visible
-# frame is the typed command — the v0.1.4 GIF was flagged for showing a
-# blank prompt as frame 0.
 Hide
-Type "source .venv/bin/activate"
+Type "export PATH=__VENV_BIN__:$PATH && cd __WORKDIR__/stage && unset ANTHROPIC_API_KEY OPENAI_API_KEY && export BROWSER=true && PS1='$ '"
 Enter
-Sleep 400ms
+Sleep 300ms
 Type "clear"
 Enter
 Sleep 200ms
 Show
 
-Type "memory-arena report --corpus longmemeval-s 2>&1 | head -10"
-Sleep 800ms
-Enter
-Sleep 5000ms
-
-Type "ls memory_arena/data/results_snapshot/longmemeval-s_*_summary.json | sed 's|.*/||' | head -5"
+Type "memory-arena demo"
 Sleep 600ms
 Enter
-Sleep 3000ms
-
-Type "python3 scripts/aggregate_bootstrap.py 2>&1 | head -10"
-Sleep 600ms
-Enter
-Sleep 5000ms
-
-Type "echo 'Hero chart at docs/hero.png'"
-Sleep 400ms
-Enter
-Sleep 1500ms
+Sleep 4200ms
