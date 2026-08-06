@@ -22,7 +22,7 @@ Compatibility notes may refer to legacy result labels and environment variables
 needed to read old artifacts. Those labels are not recommendations for a new
 benchmark run.
 
-## Dependency advisory status: six of seven cleared, one accepted with evidence
+## Six of seven high-severity advisories now clear, and the seventh cannot reach this build
 
 `npm audit` reported seven high-severity findings in the web dependency tree
 before this release. Six are now cleared. One remains and is accepted below.
@@ -57,7 +57,7 @@ Optimization API, React Server Component streaming and caching, middleware and
 proxy handling, Server Actions, rewrites, WebSocket upgrades, and the Edge
 runtime. A static export runs none of those.
 
-Two of the 21 touch client code, and neither applies:
+Two of the 21 touch client code. Neither applies here.
 
 - `GHSA-ffhc-5mcf-pf4q` needs an App Router application that sets a CSP nonce.
   This site sets no nonce.
