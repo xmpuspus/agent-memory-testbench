@@ -57,6 +57,31 @@ class TestCorpora:
             assert "label" in entry
             assert "count" in entry
 
+    def test_corpora_skips_a_directory_that_holds_no_corpus(self, client, monkeypatch, tmp_path):
+        """The bundled results snapshot sits beside the corpus and is not one."""
+
+        from memory_arena.chatbot import api as api_module
+
+        (tmp_path / "longmemeval-s" / "processed").mkdir(parents=True)
+        snapshot = tmp_path / "results_snapshot"
+        snapshot.mkdir()
+        (snapshot / "longmemeval-s_bm25_summary.json").write_text("{}")
+        (snapshot / "manifest.json").write_text("{}")
+        monkeypatch.setattr(api_module, "datasets_root", lambda: tmp_path, raising=False)
+        monkeypatch.setenv("MEM_ARENA_DATASETS_PATH", str(tmp_path))
+
+        names = [c["name"] for c in client.get("/api/corpora").json()["corpora"]]
+
+        assert names == ["longmemeval-s"]
+
+    def test_corpora_labels_the_known_corpus_by_name(self, client, monkeypatch, tmp_path):
+        (tmp_path / "longmemeval-s" / "processed").mkdir(parents=True)
+        monkeypatch.setenv("MEM_ARENA_DATASETS_PATH", str(tmp_path))
+
+        entry = client.get("/api/corpora").json()["corpora"][0]
+
+        assert entry["label"] == "LongMemEval-S"
+
 
 class TestStrategies:
     def test_strategies_endpoint(self, client):

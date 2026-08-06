@@ -175,7 +175,7 @@ export default function BenchmarkPage() {
           Headline metrics
         </h2>
         <div
-          className="rounded-lg border overflow-hidden"
+          className="rounded-lg border overflow-x-auto"
           style={{ borderColor: "var(--border)", background: "var(--card)" }}
         >
           <table className="w-full text-sm">
@@ -282,7 +282,7 @@ export default function BenchmarkPage() {
           defined.
         </p>
         <div
-          className="rounded-lg border overflow-hidden"
+          className="rounded-lg border overflow-x-auto"
           style={{ borderColor: "var(--border)", background: "var(--card)" }}
         >
           <table className="w-full text-sm">

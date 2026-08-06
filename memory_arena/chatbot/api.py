@@ -149,6 +149,11 @@ async def health() -> HealthResponse:
     )
 
 
+# Title-casing a directory name gives "Longmemeval S". Name the corpus the way
+# its authors publish it.
+CORPUS_LABELS = {"longmemeval-s": "LongMemEval-S", "longmemeval-m": "LongMemEval-M"}
+
+
 @app.get("/api/corpora")
 async def list_corpora() -> dict:
     from memory_arena.paths import datasets_root
@@ -159,6 +164,11 @@ async def list_corpora() -> dict:
         for d in sorted(base.iterdir()):
             if not d.is_dir() or d.name.startswith("."):
                 continue
+            # The bundled result snapshot sits beside the corpus in the same
+            # data directory. It holds result JSON, not sessions or questions,
+            # so listing it as a corpus shows the reader an internal directory.
+            if not (d / "processed").is_dir() and not (d / "questions").is_dir():
+                continue
             q_dir = d / "questions"
             count = 0
             if q_dir.is_dir():
@@ -167,7 +177,8 @@ async def list_corpora() -> dict:
                         count += q.read_text().count("- id:")
                     except OSError:
                         pass
-            out.append({"name": d.name, "label": d.name.replace("-", " ").title(), "count": count})
+            label = CORPUS_LABELS.get(d.name, d.name.replace("-", " ").title())
+            out.append({"name": d.name, "label": label, "count": count})
     if not out:
         out = [{"name": "longmemeval-s", "label": "LongMemEval-S", "count": 30}]
     return {"corpora": out}

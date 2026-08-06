@@ -77,20 +77,25 @@ def main() -> int:
     print(f"Freezing API responses into {out_dir}")
     print(f"Results root: {results_root()}")
 
+    # Collect and check every payload before the first write. A guard that
+    # fires halfway through leaves the export holding files from a source the
+    # later guard rejected, which is worse than writing nothing.
+    payloads: dict[str, object] = {}
+    declared = _snapshot_strategies()
+
     with TestClient(app) as client:
         health = client.get("/api/health")
         if health.status_code != 200:
             raise SystemExit(f"/api/health returned {health.status_code}")
         snapshot_status = health.json().get("snapshot_status")
-        if snapshot_status == "unavailable":
-            raise SystemExit("refusing to build a Pages site with no bundled snapshot")
+        if snapshot_status != "historical":
+            raise SystemExit(f"refusing to build a Pages site, snapshot is {snapshot_status}")
         print(f"Snapshot status: {snapshot_status}")
-        _write(out_dir, "/api/health", health.json())
+        payloads["/api/health"] = health.json()
+        payloads["/api/corpora"] = client.get("/api/corpora").json()
+        payloads["/api/strategies"] = client.get("/api/strategies").json()
 
-        _write(out_dir, "/api/corpora", client.get("/api/corpora").json())
-        _write(out_dir, "/api/strategies", client.get("/api/strategies").json())
-
-        frozen = 0
+        skipped: list[str] = []
         for corpus in _corpora(client):
             benchmark = client.get(f"/api/benchmark/{corpus}")
             if benchmark.status_code != 200:
@@ -99,27 +104,31 @@ def main() -> int:
             snapshot = body.get("snapshot") or {}
             if snapshot.get("status") != "historical":
                 raise SystemExit(f"/api/benchmark/{corpus} snapshot is {snapshot.get('status')}")
-            declared = _snapshot_strategies()
             got = [row["strategy"] for row in body.get("results", [])]
             if got != declared:
                 raise SystemExit(f"benchmark rows {got} do not match the manifest {declared}")
-            _write(out_dir, f"/api/benchmark/{corpus}", body)
-            _write(out_dir, f"/api/results/{corpus}", client.get(f"/api/results/{corpus}").json())
+            payloads[f"/api/benchmark/{corpus}"] = body
+            payloads[f"/api/results/{corpus}"] = client.get(f"/api/results/{corpus}").json()
 
-            for strategy in _snapshot_strategies():
+            for strategy in declared:
                 route = f"/api/recall-records/{corpus}/{strategy}"
                 res = client.get(route)
                 if res.status_code != 200:
-                    print(f"  skip {route} ({res.status_code})")
+                    skipped.append(f"{route} ({res.status_code})")
                     continue
-                _write(out_dir, route, res.json())
-                frozen += 1
+                payloads[route] = res.json()
+
+    for route, payload in payloads.items():
+        _write(out_dir, route, payload)
 
     # GitHub Pages runs Jekyll on a plain branch source, and Jekyll drops any
     # directory whose name starts with an underscore. That would remove every
     # Next.js asset under _next/.
     (out_dir / ".nojekyll").write_text("")
-    print(f"  wrote /.nojekyll\nFroze {frozen} recall-record routes.")
+    print("  wrote /.nojekyll")
+    for line in skipped:
+        print(f"  SKIPPED {line}")
+    print(f"Froze {len(payloads)} routes, skipped {len(skipped)}.")
     return 0
 
 

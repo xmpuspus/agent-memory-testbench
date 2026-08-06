@@ -136,9 +136,9 @@ def _primary_raw_score(record: dict) -> float | None:
 def _primary_failure_reason(record: dict) -> str:
     """Say whether the primary grade is absent or present but unusable."""
     score = record.get("score")
-    if isinstance(score, dict) and score.get("judge_score") is not None:
-        return "invalid_primary_raw_score"
-    return "missing_primary_raw_score"
+    if score is None or (isinstance(score, dict) and score.get("judge_score") is None):
+        return "missing_primary_raw_score"
+    return "invalid_primary_raw_score"
 
 
 def _ungraded_identity(record: dict, strategy: str, reason: str) -> dict:

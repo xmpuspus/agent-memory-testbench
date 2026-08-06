@@ -46,12 +46,21 @@ def test_primary_raw_score_rejects_a_value_outside_the_grading_range(judge_score
     assert cross_judge._primary_raw_score({"score": {"judge_score": judge_score}}) == expected
 
 
-def test_primary_failure_reason_separates_an_absent_grade_from_a_broken_one():
-    assert cross_judge._primary_failure_reason({"score": {}}) == "missing_primary_raw_score"
-    assert (
-        cross_judge._primary_failure_reason({"score": {"judge_score": "NaN"}})
-        == "invalid_primary_raw_score"
-    )
+@pytest.mark.parametrize(
+    ("record", "expected"),
+    [
+        ({"score": {}}, "missing_primary_raw_score"),
+        ({}, "missing_primary_raw_score"),
+        ({"score": None}, "missing_primary_raw_score"),
+        ({"score": {"judge_score": None}}, "missing_primary_raw_score"),
+        ({"score": {"judge_score": "NaN"}}, "invalid_primary_raw_score"),
+        ({"score": {"judge_score": 101}}, "invalid_primary_raw_score"),
+        ({"score": "broken"}, "invalid_primary_raw_score"),
+        ({"score": [80]}, "invalid_primary_raw_score"),
+    ],
+)
+def test_primary_failure_reason_separates_an_absent_grade_from_a_broken_one(record, expected):
+    assert cross_judge._primary_failure_reason(record) == expected
 
 
 def test_spearman_reports_no_correlation_when_evidence_is_too_thin():
@@ -420,6 +429,50 @@ async def test_report_keeps_a_valid_zero_grade(monkeypatch: pytest.MonkeyPatch, 
             "disagreement": 80.0,
         }
     ]
+
+
+@pytest.mark.asyncio
+async def test_report_accounts_for_every_record_in_one_strategy_loop(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+):
+    """Each record reports under its own identity, and none is counted twice."""
+
+    records = [
+        {"question_id": "q-good", "seed": 1, "answer": "a", "score": {"judge_score": 90.0}},
+        {"question_id": "q-broken", "seed": 2, "answer": "a", "score": {"judge_score": "x"}},
+        {"question_id": "q-absent-primary", "seed": 3, "answer": "a", "score": {}},
+        {"question_id": "q-unparseable", "seed": 4, "answer": "a", "score": {"judge_score": 70.0}},
+    ]
+
+    async def grade(client, model, question, reference, candidate):
+        return None if question == "text q-unparseable" else 55
+
+    report = await _run_report(
+        monkeypatch,
+        tmp_path,
+        records=records,
+        questions={
+            rec["question_id"]: {
+                "question": f"text {rec['question_id']}",
+                "reference_answer": "reference",
+            }
+            for rec in records
+        },
+        grade_one=grade,
+    )
+
+    assert report["grade_counts"] == {"graded": 1, "ungraded": 3}
+    assert sum(report["grade_counts"].values()) == len(records)
+    assert report["per_strategy"]["test_strategy"]["ungraded_count"] == 3
+    by_id = {row["question_id"]: row for row in report["per_question"]}
+    assert len(report["per_question"]) == len(records)
+    assert by_id["q-broken"]["reason"] == "invalid_primary_raw_score"
+    assert by_id["q-broken"]["seed"] == 2
+    assert by_id["q-absent-primary"]["reason"] == "missing_primary_raw_score"
+    assert by_id["q-absent-primary"]["seed"] == 3
+    assert by_id["q-unparseable"]["reason"] == "unparseable_secondary_judge_response"
+    assert by_id["q-unparseable"]["seed"] == 4
+    assert by_id["q-good"]["second_raw_score"] == pytest.approx(55.0)
 
 
 @pytest.mark.asyncio
