@@ -1,6 +1,9 @@
 # Codebase intelligence (auto-generated)
 .planning/
 
+# Local git worktrees
+.worktrees/
+
 # Python
 __pycache__/
 *.py[cod]
