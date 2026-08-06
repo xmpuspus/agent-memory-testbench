@@ -36,6 +36,18 @@ function f1(value: number | null | undefined): string {
 
 type SortKey = "accuracy" | "recall" | "latency" | "cost" | "name";
 
+function compareSortValues(
+  a: number | string | null,
+  b: number | string | null,
+  descending: boolean
+): number {
+  if (a === null) return b === null ? 0 : 1;
+  if (b === null) return -1;
+  if (a < b) return descending ? 1 : -1;
+  if (a > b) return descending ? -1 : 1;
+  return 0;
+}
+
 export default function BenchmarkPage() {
   const [corpus, setCorpus] = useState(CORPORA[0]?.name ?? "longmemeval-s");
   const [dataState, setDataState] = useState<BenchmarkDataState | null>(null);
@@ -57,34 +69,32 @@ export default function BenchmarkPage() {
       const av = (() => {
         switch (sortKey) {
           case "accuracy":
-            return a.accuracy ?? 0;
+            return a.accuracy;
           case "recall":
-            return a.mean_session_recall_at_k ?? 0;
+            return a.mean_session_recall_at_k;
           case "latency":
-            return a.avg_recall_latency_ms ?? 0;
+            return a.avg_recall_latency_ms;
           case "cost":
-            return a.total_cost_usd ?? 0;
+            return a.total_cost_usd;
           case "name":
-            return a.strategy ?? "";
+            return a.strategy;
         }
       })();
       const bv = (() => {
         switch (sortKey) {
           case "accuracy":
-            return b.accuracy ?? 0;
+            return b.accuracy;
           case "recall":
-            return b.mean_session_recall_at_k ?? 0;
+            return b.mean_session_recall_at_k;
           case "latency":
-            return b.avg_recall_latency_ms ?? 0;
+            return b.avg_recall_latency_ms;
           case "cost":
-            return b.total_cost_usd ?? 0;
+            return b.total_cost_usd;
           case "name":
-            return b.strategy ?? "";
+            return b.strategy;
         }
       })();
-      if (av < bv) return sortDesc ? 1 : -1;
-      if (av > bv) return sortDesc ? -1 : 1;
-      return 0;
+      return compareSortValues(av, bv, sortDesc);
     });
     return copy;
   }, [rows, sortKey, sortDesc]);

@@ -175,8 +175,8 @@ export async function fetchCorpora(): Promise<CorpusInfo[]> {
 export interface BenchmarkRow {
   strategy: Strategy | string;
   accuracy: number;
-  mean_session_recall_at_k: number;
-  mean_session_hit_at_k?: number;
+  mean_session_recall_at_k: number | null;
+  mean_session_hit_at_k?: number | null;
   avg_recall_latency_ms: number;
   total_cost_usd: number;
   // Per-category metrics are null when no question of that category was
@@ -243,9 +243,9 @@ function isBenchmarkRow(value: unknown): value is BenchmarkRow {
     isRecord(value) &&
     typeof value.strategy === "string" &&
     typeof value.accuracy === "number" &&
-    typeof value.mean_session_recall_at_k === "number" &&
+    isNullableNumber(value.mean_session_recall_at_k) &&
     (value.mean_session_hit_at_k === undefined ||
-      typeof value.mean_session_hit_at_k === "number") &&
+      isNullableNumber(value.mean_session_hit_at_k)) &&
     typeof value.avg_recall_latency_ms === "number" &&
     typeof value.total_cost_usd === "number" &&
     isNullableNumber(value.abstention_f1) &&
