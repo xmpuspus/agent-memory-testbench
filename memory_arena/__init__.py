@@ -1,6 +1,6 @@
 """Memory Arena — Knowledge Base Benchmark. Find which retrieval architecture fits your data."""
 
-__version__ = "0.1.8"
+__version__ = "0.1.9"
 
 from memory_arena.models.benchmark import BenchmarkResult, Question
 from memory_arena.models.document import Document, Section

@@ -4,6 +4,20 @@ All notable changes to Memory Arena.
 
 ## [Unreleased]
 
+## [0.1.9] - 2026-08-05
+
+### Fixed
+- Corrected question loading and raw cross-judge comparison.
+
+### Evidence
+- Bundled snapshot: `v0.1.8-bundled-historical`.
+
+### Compatibility
+- The package, CLI command, and Python import remain `memory-arena` and `memory_arena`.
+
+### Known limitations
+- This release does not publish a new benchmark ranking.
+
 ## [0.1.8] - 2026-06-28 - Level the field: vendor SDKs on the same model, mem0g dropped, full cross-judge
 
 ### Changed
