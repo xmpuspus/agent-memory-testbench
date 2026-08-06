@@ -17,9 +17,9 @@ from rich.logging import RichHandler
 app = typer.Typer(
     name="memory-arena",
     help=(
-        "Agent Memory Testbench (formerly Memory Arena): benchmark agent-memory "
-        "architectures: Mem0, Graphiti, Cognee, "
-        "LangMem, Memori, naive vector, recency window, full context."
+        "Agent Memory Testbench (formerly Memory Arena): benchmark agent memory "
+        "from retrieval to answer. Run `demo` to inspect the bundled historical "
+        "evidence without an API key."
     ),
     no_args_is_help=True,
 )

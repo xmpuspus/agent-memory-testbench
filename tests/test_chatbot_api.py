@@ -8,6 +8,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from memory_arena.chatbot.api import app
+from memory_arena.evidence.failures import FAILURE_CLASSES
 
 
 @pytest.fixture
@@ -161,6 +162,22 @@ class TestRecallRecords:
         body = r.json()
         assert body["strategy"] == "bm25"
         assert len(body["records"]) > 0
+
+    def test_recall_records_join_the_question_and_classify_the_failure(self, client):
+        """The Failure Lab needs question text, expected answer, and a class."""
+        body = client.get("/api/recall-records/longmemeval-s/naive_vector").json()
+
+        assert body["judge_fail_threshold"] == pytest.approx(50.0)
+        assert set(body["failure_counts"]) <= set(FAILURE_CLASSES)
+        record = next(r for r in body["records"] if r["question_id"] == "71017276")
+        assert record["question"].startswith("How many weeks ago")
+        assert record["expected_answer"] == "4"
+        assert record["gold_session_ids"] == ["answer_0b4a8adc_1"]
+        assert record["session_hit"] is True
+        assert record["turn_hit"] is False
+        assert record["judge_score"] == 5.0
+        assert record["failure_class"] == "correct_session_wrong_answer"
+        assert body["failure_counts"]["correct_session_wrong_answer"] >= 1
 
     def test_recall_records_unknown_strategy_404(self, client):
         r = client.get("/api/recall-records/longmemeval-s/not_a_strategy")

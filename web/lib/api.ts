@@ -299,10 +299,48 @@ export interface RecallIR {
   turn_recall_at_k: number;
 }
 
+// Why an answer failed, computed by memory_arena.evidence.failures from the
+// stored record. Never estimated, and never shown without its evidence.
+export type FailureClass =
+  | "answer_ok"
+  | "correct_session_wrong_answer"
+  | "retrieval_miss"
+  | "retrieval_unmeasured"
+  | "ungraded"
+  | "error";
+
+export const FAILURE_LABELS: Record<FailureClass, string> = {
+  answer_ok: "Answer graded above the threshold",
+  correct_session_wrong_answer: "Correct session, wrong answer",
+  retrieval_miss: "Retrieval miss",
+  retrieval_unmeasured: "Retrieval not measurable",
+  ungraded: "Ungraded",
+  error: "Run error",
+};
+
+export interface RecordScore {
+  judge_score?: number | null;
+  judge_rationale?: string | null;
+  structural_pass?: boolean | null;
+  structural_fails?: string[] | null;
+  sources_pass?: boolean | null;
+  accuracy?: number | null;
+}
+
 export interface RecallRecord {
   question_id: string;
   category: string;
   answer?: string;
+  // Joined from the corpus question file by the API. Null when the install
+  // carries no question file for this corpus.
+  question?: string | null;
+  expected_answer?: string | null;
+  gold_session_ids?: string[];
+  failure_class?: FailureClass;
+  judge_score?: number | null;
+  session_hit?: boolean | null;
+  turn_hit?: boolean | null;
+  score?: RecordScore | null;
   // The strategy's retrieved supporting session ids — not the gold-truth
   // expected ones. Expected supporting ids live in the question file and
   // aren't echoed back in recall_records.
@@ -320,6 +358,8 @@ export interface RecallRecordsResponse {
   strategy: string;
   recall_at_k_measurable: boolean | null;
   top_k: number | null;
+  judge_fail_threshold?: number;
+  failure_counts?: Partial<Record<FailureClass, number>>;
   records: RecallRecord[];
 }
 

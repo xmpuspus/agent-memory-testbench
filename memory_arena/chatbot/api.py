@@ -7,7 +7,9 @@ to read benchmark results, list strategies, and stream the demo recall flow.
 from __future__ import annotations
 
 import json
+import os
 import re
+from collections import Counter
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Literal
@@ -20,6 +22,11 @@ from pydantic import BaseModel, Field
 
 from memory_arena import __version__ as _ma_version
 from memory_arena.evidence.bundled import load_bundled_manifest
+from memory_arena.evidence.failures import (
+    FAILURE_CLASSES,
+    JUDGE_FAIL_THRESHOLD,
+    join_question_evidence,
+)
 from memory_arena.settings import settings
 
 
@@ -270,6 +277,51 @@ async def get_benchmark(
     return await get_results(corpus)
 
 
+def _load_question_map(corpus: str) -> dict[str, dict]:
+    from memory_arena.sessions.loaders import load_questions_jsonl
+
+    try:
+        records = load_questions_jsonl(corpus)
+    except (OSError, ValueError, json.JSONDecodeError):
+        return {}
+    out: dict[str, dict] = {}
+    for record in records:
+        truth = record.ground_truth
+        out[record.id] = {
+            "question": record.question,
+            "answer": getattr(truth, "answer", None),
+            "supporting_session_ids": list(getattr(truth, "supporting_session_ids", None) or []),
+        }
+    return out
+
+
+def _question_evidence(corpus: str) -> dict[str, dict]:
+    """Question text, expected answer, and gold sessions, keyed by question id.
+
+    A checkout keeps the processed corpus out of git, so a fresh clone has the
+    corpus directory but not the question file. The package bundles the same 16
+    questions, so fall back to those rather than show the Failure Lab with no
+    question text. A corpus neither path carries gives an empty map, and the
+    join then writes explicit nulls rather than a guess.
+    """
+    local = _load_question_map(corpus)
+    if local:
+        return local
+
+    bundled = Path(__file__).resolve().parents[1] / "data"
+    if not (bundled / corpus / "processed" / "questions.jsonl").exists():
+        return {}
+    previous = os.environ.get("MEM_ARENA_DATASETS_PATH")
+    os.environ["MEM_ARENA_DATASETS_PATH"] = str(bundled)
+    try:
+        return _load_question_map(corpus)
+    finally:
+        if previous is None:
+            os.environ.pop("MEM_ARENA_DATASETS_PATH", None)
+        else:
+            os.environ["MEM_ARENA_DATASETS_PATH"] = previous
+
+
 @app.get("/api/recall-records/{corpus}/{strategy}")
 async def get_recall_records(
     corpus: str = FPath(..., pattern=r"^[a-z0-9_\-]+$"),
@@ -312,6 +364,9 @@ async def get_recall_records(
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
+    records = join_question_evidence(data.get("recall_records", []), _question_evidence(corpus))
+    counts = Counter(record["failure_class"] for record in records)
+
     # Decorate each record with a per-record measurability flag and a
     # strategy-level measurability flag so the dashboard can show
     # "Recall not measurable for this strategy" instead of pretending HIT/MISS.
@@ -320,7 +375,9 @@ async def get_recall_records(
         "strategy": strategy,
         "recall_at_k_measurable": data.get("recall_at_k_measurable"),
         "top_k": data.get("top_k"),
-        "records": data.get("recall_records", []),
+        "judge_fail_threshold": JUDGE_FAIL_THRESHOLD,
+        "failure_counts": {n: counts[n] for n in FAILURE_CLASSES if counts.get(n)},
+        "records": records,
     }
 
 
