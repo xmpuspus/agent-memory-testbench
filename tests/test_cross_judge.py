@@ -83,3 +83,48 @@ async def test_report_counts_missing_primary_scores_without_grading_or_appending
             "disagreement": 20.0,
         }
     ]
+
+
+@pytest.mark.asyncio
+async def test_report_keeps_all_missing_strategy_out_of_means_and_ranks(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+):
+    """An all-ungraded strategy remains visible without a fabricated mean or rank."""
+
+    report_path = tmp_path / "cross_judge_report.json"
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setattr(sys, "argv", ["cross_judge.py", "--top-k", "1"])
+    monkeypatch.setitem(sys.modules, "openai", ModuleType("openai"))
+    sys.modules["openai"].AsyncOpenAI = lambda: object()
+    monkeypatch.setattr(cross_judge, "REPORT", report_path)
+    monkeypatch.setattr(cross_judge, "_load_top_strategies", lambda top_k: ["all_missing"])
+    monkeypatch.setattr(
+        cross_judge,
+        "_load_seed_records",
+        lambda strategy: [
+            {
+                "question_id": "missing-primary",
+                "seed": 7,
+                "answer": "candidate",
+                "score": {"accuracy": 0.4},
+            }
+        ],
+    )
+    monkeypatch.setattr(cross_judge, "_load_questions", lambda: {})
+
+    async def grade_once(client, model, question, reference, candidate):
+        raise AssertionError("all-ungraded records must not call the provider")
+
+    monkeypatch.setattr(cross_judge, "_grade_one", grade_once)
+
+    await cross_judge.main()
+
+    report = json.loads(report_path.read_text())
+    assert report["per_strategy"]["all_missing"] == {
+        "n_grades": 0,
+        "graded_count": 0,
+        "ungraded_count": 1,
+    }
+    assert report["opus_rank"] == []
+    assert report["gpt-4o_rank"] == []
+    assert report["per_question"] == []

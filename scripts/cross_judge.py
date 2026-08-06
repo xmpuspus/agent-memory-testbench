@@ -175,6 +175,12 @@ async def main() -> None:
                 }
             )
         if not opus_scores:
+            per_strategy[strategy] = {
+                "n_grades": 0,
+                "graded_count": 0,
+                "ungraded_count": ungraded_count,
+            }
+            print(f"  [skip] {strategy}: no completed grades")
             continue
         per_strategy[strategy] = {
             "opus_mean": mean(opus_scores),
@@ -189,8 +195,11 @@ async def main() -> None:
         )
 
     # Spearman rank-correlation across the top strategies.
-    opus_rank = sorted(per_strategy, key=lambda s: -per_strategy[s]["opus_mean"])
-    gpt_rank = sorted(per_strategy, key=lambda s: -per_strategy[s]["gpt4o_mean"])
+    ranked_strategies = {
+        strategy: result for strategy, result in per_strategy.items() if result["graded_count"]
+    }
+    opus_rank = sorted(ranked_strategies, key=lambda s: -ranked_strategies[s]["opus_mean"])
+    gpt_rank = sorted(ranked_strategies, key=lambda s: -ranked_strategies[s]["gpt4o_mean"])
     name_to_opus_rank = {s: i for i, s in enumerate(opus_rank)}
     name_to_gpt_rank = {s: i for i, s in enumerate(gpt_rank)}
     rho = _spearman(
