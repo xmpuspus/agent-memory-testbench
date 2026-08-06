@@ -22,6 +22,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import math
 import os
 from pathlib import Path
 from statistics import mean
@@ -113,11 +114,31 @@ def _load_seed_records(strategy: str) -> list[dict]:
 
 
 def _primary_raw_score(record: dict) -> float | None:
+    """Return the stored primary grade, or None when the record holds no grade.
+
+    The grade must be a finite number from 0 through 100. An earlier version
+    clamped instead, which turned `NaN` into a perfect 100 and raised on text.
+    A clamp hides a broken record behind a plausible number.
+    """
     score = record.get("score") or {}
     value = score.get("judge_score") if isinstance(score, dict) else None
-    if value is None:
+    if isinstance(value, bool) or not isinstance(value, int | float | str):
         return None
-    return max(0.0, min(100.0, float(value)))
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(number) or number < 0.0 or number > 100.0:
+        return None
+    return number
+
+
+def _primary_failure_reason(record: dict) -> str:
+    """Say whether the primary grade is absent or present but unusable."""
+    score = record.get("score")
+    if isinstance(score, dict) and score.get("judge_score") is not None:
+        return "invalid_primary_raw_score"
+    return "missing_primary_raw_score"
 
 
 def _ungraded_identity(record: dict, strategy: str, reason: str) -> dict:
@@ -130,9 +151,14 @@ def _ungraded_identity(record: dict, strategy: str, reason: str) -> dict:
     }
 
 
-def _spearman(opus_rank: list[int], gpt_rank: list[int]) -> float:
+def _spearman(opus_rank: list[int], gpt_rank: list[int]) -> float | None:
+    """Rank correlation, or None when two ranked strategies do not exist.
+
+    Zero means the two judges agree no better than chance. Too little evidence
+    to say means something else, so it does not get to print as a number.
+    """
     if len(opus_rank) != len(gpt_rank) or len(opus_rank) < 2:
-        return 0.0
+        return None
     n = len(opus_rank)
     diffs_sq = sum((o - g) ** 2 for o, g in zip(opus_rank, gpt_rank, strict=True))
     return 1 - (6 * diffs_sq) / (n * (n**2 - 1))
@@ -178,7 +204,7 @@ async def main() -> None:
 
             opus = _primary_raw_score(rec)
             if opus is None:
-                record_ungraded("missing_primary_raw_score")
+                record_ungraded(_primary_failure_reason(rec))
                 continue
             qid = rec.get("question_id", "")
             qmeta = questions.get(qid)
@@ -273,7 +299,13 @@ async def main() -> None:
         )
     )
     print(f"\nWrote {REPORT}")
-    print(f"Spearman rank correlation (opus vs {args.judge}): {rho:+.3f}")
+    if rho is None:
+        print(
+            f"Spearman rank correlation (opus vs {args.judge}): "
+            "not available, fewer than two graded strategies"
+        )
+    else:
+        print(f"Spearman rank correlation (opus vs {args.judge}): {rho:+.3f}")
 
 
 if __name__ == "__main__":

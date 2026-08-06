@@ -20,6 +20,48 @@ def test_primary_raw_score_returns_none_when_missing():
     assert cross_judge._primary_raw_score({"score": {"accuracy": 0.4}}) is None
 
 
+@pytest.mark.parametrize(
+    ("judge_score", "expected"),
+    [
+        (0, 0.0),
+        (100, 100.0),
+        ("80", 80.0),
+        (79.5, 79.5),
+        (None, None),
+        ("NaN", None),
+        (float("nan"), None),
+        (float("inf"), None),
+        (float("-inf"), None),
+        ("abc", None),
+        ("", None),
+        (-1, None),
+        (101, None),
+        ([80], None),
+        ({"value": 80}, None),
+    ],
+)
+def test_primary_raw_score_rejects_a_value_outside_the_grading_range(judge_score, expected):
+    """A stored grade that is not a finite number from 0 through 100 is not a grade."""
+
+    assert cross_judge._primary_raw_score({"score": {"judge_score": judge_score}}) == expected
+
+
+def test_primary_failure_reason_separates_an_absent_grade_from_a_broken_one():
+    assert cross_judge._primary_failure_reason({"score": {}}) == "missing_primary_raw_score"
+    assert (
+        cross_judge._primary_failure_reason({"score": {"judge_score": "NaN"}})
+        == "invalid_primary_raw_score"
+    )
+
+
+def test_spearman_reports_no_correlation_when_evidence_is_too_thin():
+    """Fewer than two ranked strategies give an undefined correlation, not zero."""
+
+    assert cross_judge._spearman([], []) is None
+    assert cross_judge._spearman([0], [0]) is None
+    assert cross_judge._spearman([0, 1], [0, 1]) == pytest.approx(1.0)
+
+
 async def _run_report(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path,
@@ -342,6 +384,7 @@ async def test_report_counts_an_unparseable_secondary_response_as_ungraded(
         }
     ]
     assert report["opus_rank"] == []
+    assert report["spearman_rank_correlation"] is None
 
 
 @pytest.mark.asyncio
@@ -421,6 +464,7 @@ async def test_report_keeps_all_missing_strategy_out_of_means_and_ranks(
     }
     assert report["opus_rank"] == []
     assert report["gpt-4o_rank"] == []
+    assert report["spearman_rank_correlation"] is None
     assert report["grade_counts"] == {"graded": 0, "ungraded": 1}
     assert report["per_question"] == [
         {
