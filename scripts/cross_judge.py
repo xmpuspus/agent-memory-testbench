@@ -89,9 +89,18 @@ def _load_seed_records(strategy: str) -> list[dict]:
     out = []
     for p in sorted(RESULTS_DIR.glob(f"longmemeval-s_{strategy}_seed*.json")):
         d = json.loads(p.read_text())
+        seed = (d.get("metadata") or {}).get("seed")
         for rec in d.get("recall_records", []):
-            out.append(rec)
+            out.append({**rec, "seed": rec.get("seed", seed)})
     return out
+
+
+def _primary_raw_score(record: dict) -> float | None:
+    score = record.get("score") or {}
+    value = score.get("judge_score") if isinstance(score, dict) else None
+    if value is None:
+        return None
+    return max(0.0, min(100.0, float(value)))
 
 
 def _spearman(opus_rank: list[int], gpt_rank: list[int]) -> float:
@@ -122,6 +131,8 @@ async def main() -> None:
 
     questions = _load_questions()
     per_strategy: dict[str, dict] = {}
+    per_question: list[dict] = []
+    grade_counts = {"graded": 0, "ungraded": 0}
     for strategy in strategies:
         recs = _load_seed_records(strategy)
         if not recs:
@@ -129,7 +140,13 @@ async def main() -> None:
             continue
         opus_scores: list[float] = []
         gpt_scores: list[float] = []
+        ungraded_count = 0
         for rec in recs:
+            opus = _primary_raw_score(rec)
+            if opus is None:
+                ungraded_count += 1
+                grade_counts["ungraded"] += 1
+                continue
             qid = rec.get("question_id", "")
             qmeta = questions.get(qid)
             if not qmeta:
@@ -137,11 +154,6 @@ async def main() -> None:
             q = qmeta["question"]
             ref = qmeta["reference_answer"]
             cand = rec.get("answer") or ""
-            score_obj = rec.get("score") or {}
-            if isinstance(score_obj, dict):
-                opus = float(score_obj.get("accuracy", 0)) * 100
-            else:
-                opus = float(score_obj or 0)
             if not q or not ref or not cand:
                 continue
             try:
@@ -151,12 +163,25 @@ async def main() -> None:
                 continue
             opus_scores.append(opus)
             gpt_scores.append(float(gpt))
+            grade_counts["graded"] += 1
+            per_question.append(
+                {
+                    "question_id": qid,
+                    "strategy": strategy,
+                    "seed": rec.get("seed"),
+                    "primary_raw_score": opus,
+                    "second_raw_score": float(gpt),
+                    "disagreement": abs(opus - float(gpt)),
+                }
+            )
         if not opus_scores:
             continue
         per_strategy[strategy] = {
             "opus_mean": mean(opus_scores),
             "gpt4o_mean": mean(gpt_scores),
             "n_grades": len(opus_scores),
+            "graded_count": len(opus_scores),
+            "ungraded_count": ungraded_count,
         }
         print(
             f"  [done] {strategy}: opus={mean(opus_scores):.1f} "
@@ -178,10 +203,16 @@ async def main() -> None:
         json.dumps(
             {
                 "judges": ["claude-opus-4-7", args.judge],
+                "score_semantics": {
+                    "primary": "raw_judge_score_0_100",
+                    "secondary": "raw_judge_score_0_100",
+                },
+                "grade_counts": grade_counts,
                 "spearman_rank_correlation": rho,
                 "opus_rank": opus_rank,
                 f"{args.judge}_rank": gpt_rank,
                 "per_strategy": per_strategy,
+                "per_question": per_question,
             },
             indent=2,
         )
