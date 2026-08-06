@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 
 from typer.testing import CliRunner
 
@@ -79,9 +80,12 @@ class TestRegisteredCommands:
 
     def test_demo_runs_and_reports_its_own_help(self):
         result = CliRunner().invoke(app, ["demo", "--help"])
+        # Rich colours each option on a CI terminal and not on a plain one, so
+        # `--port` arrives split by escape codes. Strip them before matching.
+        plain = re.sub(r"\x1b\[[0-9;]*m", "", result.stdout)
 
         assert result.exit_code == 0
-        assert "--port" in result.stdout
+        assert "--port" in plain
 
 
 class TestDemoBanner:
