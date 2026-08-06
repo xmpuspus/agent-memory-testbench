@@ -23,6 +23,7 @@ class TestCLIHelp:
     def test_benchmark_help(self):
         result = runner.invoke(app, ["benchmark", "--help"])
         assert result.exit_code == 0
+        assert "preflight" in result.output
 
     def test_recall_lab_help(self):
         result = runner.invoke(app, ["recall-lab", "--help"])

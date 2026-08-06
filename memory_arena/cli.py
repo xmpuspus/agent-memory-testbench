@@ -177,7 +177,10 @@ def build_memory(
 def benchmark(
     corpus: str = typer.Option("longmemeval-s", help="Corpus name"),
     strategy: str = typer.Option("all", help="Comma-separated names or 'all'"),
-    questions: str = typer.Option("smoke", help="Question subset: smoke, full, or path"),
+    questions: str = typer.Option(
+        "preflight",
+        help="Question subset: preflight, historical-v0.1.8, full, or path",
+    ),
     cost_cap: float = typer.Option(5.0, help="Halt if cumulative cost exceeds (USD)"),
     top_k: int = typer.Option(5, "--top-k", help="Held constant across all strategies."),
     seed: int | None = typer.Option(
