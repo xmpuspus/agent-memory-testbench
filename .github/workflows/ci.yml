@@ -53,15 +53,30 @@ jobs:
           bandit -r memory_arena/ -ll
 
   # gitleaks: scan repo for committed secrets. Hard fail on findings.
+  #
+  # This calls the gitleaks binary rather than gitleaks/gitleaks-action. On
+  # 2026-08-06 GitHub's action-resolution service returned Service Unavailable
+  # for that action across five attempts over an hour, while every actions/*
+  # step in the other jobs resolved. The job never reached the scan, so a red
+  # check meant nothing. The binary removes that dependency and keeps the gate.
   gitleaks:
     runs-on: ubuntu-latest
+    env:
+      GITLEAKS_VERSION: "8.30.1"
     steps:
       - uses: actions/checkout@v5
         with:
           fetch-depth: 0
-      - uses: gitleaks/gitleaks-action@v3
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Install gitleaks
+        run: |
+          set -euo pipefail
+          curl -sSfL -o /tmp/gitleaks.tar.gz \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          tar -xzf /tmp/gitleaks.tar.gz -C /tmp gitleaks
+          sudo install -m 0755 /tmp/gitleaks /usr/local/bin/gitleaks
+          gitleaks version
+      - name: Scan committed history for secrets
+        run: gitleaks git --redact --no-banner --exit-code 1 .
 
   frontend:
     runs-on: ubuntu-latest
