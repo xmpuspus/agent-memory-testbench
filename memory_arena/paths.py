@@ -1,17 +1,15 @@
-"""Path resolution: bundled-data-first, then local CWD fallback.
+"""Path resolution: local checkout data first, then bundled package data.
 
 When `pip install memory-arena` lands the wheel in site-packages, there is no
 `./datasets/` or `./results/` next to the user. The demo command needs to find
 the bundled smoke corpus and a result snapshot anyway.
 
-This module returns the bundled location if it exists, else falls back to the
-working directory. Local dev (running from a checkout with `./datasets/`)
-still reads the live tree because that path takes precedence — actually no,
-bundled wins by default to avoid the case where someone runs `memory-arena
-demo` from a random directory and gets nothing.
+Local checkout data wins when it is present. An environment override selects
+another path explicitly; otherwise package-bundled data supports installed
+users who have no local checkout data.
 
 Override behavior with the env vars:
-    MEM_ARENA_DATASETS_PATH=./datasets   # use local first
+    MEM_ARENA_DATASETS_PATH=./datasets
     MEM_ARENA_RESULTS_PATH=./results
 """
 

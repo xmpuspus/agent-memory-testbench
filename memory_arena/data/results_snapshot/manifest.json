@@ -1,0 +1,121 @@
+{
+  "snapshot_id": "v0.1.8-bundled-historical",
+  "status": "historical",
+  "protocol_id": "legacy-v0.1",
+  "corpus": "longmemeval-s",
+  "question_set": "historical-v0.1.8",
+  "question_count": 16,
+  "category_count": 4,
+  "included_strategies": [
+    "bm25",
+    "cognee",
+    "full_context",
+    "graphiti",
+    "hybrid_rrf",
+    "hyde",
+    "karpathy_llm_wiki",
+    "langmem",
+    "mem0",
+    "mem0g",
+    "memori",
+    "naive_vector",
+    "persona_profile",
+    "raptor",
+    "recency_window",
+    "reflection"
+  ],
+  "missing_from_v0.1.8_claim": [
+    "amem",
+    "graphiti_falkor",
+    "hipporag2",
+    "qiss",
+    "sqr"
+  ],
+  "source_commits": [
+    "4507708a793061be219ff43ade9ba39f8cc4d445",
+    "49c2d472238a2fe3a5fce6b7279eee3bf1af41c1",
+    "70959db96f5be99c51ced51587295defec03bdbc",
+    "d98e5776f0c491ff6fc34d57eb94efa644ec608f"
+  ],
+  "source_versions": {
+    "anthropic": [
+      "0.42.0"
+    ],
+    "chromadb": [
+      "0.5.23"
+    ],
+    "cognee": [
+      "1.0.3"
+    ],
+    "fastapi": [
+      "0.115.6",
+      "0.136.1"
+    ],
+    "graphiti-core": [
+      "0.13.0",
+      "not-installed"
+    ],
+    "langgraph": [
+      "1.1.10",
+      "not-installed"
+    ],
+    "langmem": [
+      "0.0.30",
+      "not-installed"
+    ],
+    "letta-client": [
+      "1.10.3",
+      "not-installed"
+    ],
+    "mem0ai": [
+      "0.1.114",
+      "not-installed"
+    ],
+    "memori": [
+      "3.3.2",
+      "not-installed"
+    ],
+    "memory-arena": [
+      "0.1.5"
+    ],
+    "neo4j": [
+      "5.27.0"
+    ],
+    "numpy": [
+      "2.4.4"
+    ],
+    "openai": [
+      "2.24.0"
+    ],
+    "psycopg": [
+      "3.3.3",
+      "not-installed"
+    ],
+    "pydantic": [
+      "2.10.4",
+      "2.13.3"
+    ],
+    "rank-bm25": [
+      "0.2.2"
+    ],
+    "s3fs": [
+      "2026.4.0",
+      "not-installed"
+    ],
+    "scikit-learn": [
+      "1.8.0"
+    ],
+    "tenacity": [
+      "9.0.0"
+    ],
+    "tiktoken": [
+      "0.12.0",
+      "0.7.0"
+    ]
+  },
+  "limitations": [
+    "Mixed source commits",
+    "Mixed seed counts",
+    "Not the current benchmark"
+  ]
+}

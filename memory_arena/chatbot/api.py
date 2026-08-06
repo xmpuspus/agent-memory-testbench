@@ -18,6 +18,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from memory_arena import __version__ as _ma_version
+from memory_arena.evidence.bundled import load_bundled_manifest
 from memory_arena.settings import settings
 
 
@@ -81,6 +82,8 @@ class HealthResponse(BaseModel):
     status: str
     strategies: list[str]
     has_results: bool
+    snapshot_id: str | None
+    snapshot_status: str
 
 
 @app.get("/api/health", response_model=HealthResponse)
@@ -89,6 +92,7 @@ async def health() -> HealthResponse:
     from memory_arena.strategies import STRATEGY_REGISTRY
 
     results_dir = results_root()
+    snapshot = load_bundled_manifest(results_dir)
     has_results = (
         bool(list(results_dir.glob("longmemeval-s_*.json"))) if results_dir.exists() else False
     )
@@ -96,6 +100,8 @@ async def health() -> HealthResponse:
         status="ok",
         strategies=list(STRATEGY_REGISTRY.keys()),
         has_results=has_results,
+        snapshot_id=snapshot["snapshot_id"],
+        snapshot_status=snapshot["status"],
     )
 
 
@@ -160,6 +166,7 @@ async def get_results(
         files = sorted(per_strategy.values())
     if not files:
         raise HTTPException(status_code=404, detail=f"No results for corpus: {corpus}")
+    snapshot = load_bundled_manifest(results_dir)
     rows: list[dict] = []
     for p in files:
         try:
@@ -198,7 +205,7 @@ async def get_results(
                 "run_id": data.get("run_id"),
             }
         )
-    return {"corpus": corpus, "results": rows}
+    return {"corpus": corpus, "results": rows, "snapshot": snapshot}
 
 
 @app.get("/api/benchmark/{corpus}")

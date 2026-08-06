@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -25,6 +27,12 @@ class TestHealth:
     def test_health_includes_results_flag(self, client):
         r = client.get("/api/health")
         assert "has_results" in r.json()
+
+    def test_health_exposes_snapshot_status(self, client):
+        body = client.get("/api/health").json()
+
+        assert body["snapshot_status"] in {"historical", "unavailable"}
+        assert "snapshot_id" in body
 
 
 class TestCorpora:
@@ -56,6 +64,14 @@ class TestStrategies:
 
 
 class TestResultsLookup:
+    def test_bundled_results_include_historical_snapshot(self, client, monkeypatch):
+        bundled_results = Path(__file__).parents[1] / "memory_arena" / "data" / "results_snapshot"
+        monkeypatch.setenv("MEM_ARENA_RESULTS_PATH", str(bundled_results))
+
+        body = client.get("/api/results/longmemeval-s").json()
+
+        assert body["snapshot"]["status"] == "historical"
+
     def test_results_404_when_missing(self, client):
         r = client.get("/api/results/nonexistent-corpus")
         assert r.status_code == 404
