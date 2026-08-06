@@ -10,12 +10,13 @@ import json
 import re
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Literal
 
 from fastapi import FastAPI, HTTPException
 from fastapi import Path as FPath
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from memory_arena import __version__ as _ma_version
 from memory_arena.evidence.bundled import load_bundled_manifest
@@ -28,7 +29,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="Memory Arena",
+    title="Agent Memory Testbench",
     description="Benchmark agent-memory architectures",
     version=_ma_version,
     lifespan=lifespan,
@@ -86,6 +87,49 @@ class HealthResponse(BaseModel):
     snapshot_status: str
 
 
+class SnapshotResponse(BaseModel):
+    snapshot_id: str | None
+    status: Literal["historical", "unavailable"]
+    reason: str | None = None
+    protocol_id: str | None = None
+    corpus: str | None = None
+    question_set: str | None = None
+    question_count: int | None = None
+    category_count: int | None = None
+    included_strategies: list[str] = Field(default_factory=list)
+    missing_from_v0_1_8_claim: list[str] = Field(
+        default_factory=list, alias="missing_from_v0.1.8_claim"
+    )
+    source_commits: list[str] = Field(default_factory=list)
+    source_versions: dict[str, list[str]] = Field(default_factory=dict)
+    limitations: list[str] = Field(default_factory=list)
+
+
+class ResultRowResponse(BaseModel):
+    strategy: str | None
+    accuracy: float | None
+    mean_session_recall_at_k: float | None
+    mean_session_hit_at_k: float | None
+    avg_recall_latency_ms: float | None
+    total_cost_usd: float | None
+    abstention_f1: float | None
+    abstention_n: int | None
+    update_precision: float | None
+    update_n: int | None
+    temporal_correctness: float | None
+    temporal_n: int | None
+    accuracy_by_category: dict
+    questions_evaluated: int
+    errors: int
+    run_id: str | None
+
+
+class ResultsResponse(BaseModel):
+    corpus: str
+    results: list[ResultRowResponse]
+    snapshot: SnapshotResponse
+
+
 @app.get("/api/health", response_model=HealthResponse)
 async def health() -> HealthResponse:
     from memory_arena.paths import results_root
@@ -136,10 +180,10 @@ async def list_strategies() -> dict:
     return {"strategies": [{"name": n, "available": True} for n in STRATEGY_REGISTRY]}
 
 
-@app.get("/api/results/{corpus}")
+@app.get("/api/results/{corpus}", response_model=ResultsResponse)
 async def get_results(
     corpus: str = FPath(..., pattern=r"^[a-z0-9_\-]+$"),
-) -> dict:
+) -> ResultsResponse:
     corpus = _safe_slug(corpus, "corpus")
     from memory_arena.paths import results_root
 
@@ -205,13 +249,13 @@ async def get_results(
                 "run_id": data.get("run_id"),
             }
         )
-    return {"corpus": corpus, "results": rows, "snapshot": snapshot}
+    return ResultsResponse(corpus=corpus, results=rows, snapshot=snapshot)
 
 
-@app.get("/api/benchmark/{corpus}")
+@app.get("/api/benchmark/{corpus}", response_model=ResultsResponse)
 async def get_benchmark(
     corpus: str = FPath(..., pattern=r"^[a-z0-9_\-]+$"),
-) -> dict:
+) -> ResultsResponse:
     return await get_results(corpus)
 
 

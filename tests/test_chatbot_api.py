@@ -16,6 +16,11 @@ def client():
 
 
 class TestHealth:
+    def test_openapi_uses_agent_memory_testbench_title(self, client):
+        body = client.get("/openapi.json").json()
+
+        assert body["info"]["title"] == "Agent Memory Testbench"
+
     def test_health_returns_ok(self, client):
         r = client.get("/api/health")
         assert r.status_code == 200
@@ -71,6 +76,31 @@ class TestResultsLookup:
         body = client.get("/api/results/longmemeval-s").json()
 
         assert body["snapshot"]["status"] == "historical"
+
+    def test_benchmark_alias_includes_historical_snapshot(self, client, monkeypatch):
+        bundled_results = Path(__file__).parents[1] / "memory_arena" / "data" / "results_snapshot"
+        monkeypatch.setenv("MEM_ARENA_RESULTS_PATH", str(bundled_results))
+
+        body = client.get("/api/benchmark/longmemeval-s").json()
+
+        assert body["snapshot"]["status"] == "historical"
+
+    def test_results_routes_publish_the_same_typed_snapshot_contract(self, client):
+        schema = client.get("/openapi.json").json()
+        paths = schema["paths"]
+        results_schema = paths["/api/results/{corpus}"]["get"]["responses"]["200"]["content"][
+            "application/json"
+        ]["schema"]
+        benchmark_schema = paths["/api/benchmark/{corpus}"]["get"]["responses"]["200"]["content"][
+            "application/json"
+        ]["schema"]
+
+        assert results_schema == benchmark_schema
+        response_ref = results_schema["$ref"]
+        response_name = response_ref.rsplit("/", 1)[-1]
+        response_model = schema["components"]["schemas"][response_name]
+        snapshot_ref = response_model["properties"]["snapshot"]["$ref"]
+        assert snapshot_ref == "#/components/schemas/SnapshotResponse"
 
     def test_results_404_when_missing(self, client):
         r = client.get("/api/results/nonexistent-corpus")
