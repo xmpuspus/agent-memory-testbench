@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import sys
-from types import ModuleType
+from types import ModuleType, SimpleNamespace
 
 import pytest
 
@@ -233,6 +233,148 @@ async def test_report_counts_secondary_judge_exception_as_ungraded(
             "seed": 13,
             "status": "ungraded",
             "reason": "secondary_judge_exception",
+        }
+    ]
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        ("85", 85),
+        ("  85  ", 85),
+        ("0", 0),
+        ("100", 100),
+        ("085", 85),
+        ("", None),
+        ("   ", None),
+        (None, None),
+        ("N/A", None),
+        ("I would say 85 out of 100", None),
+        ("85/100", None),
+        ("Score: 85", None),
+        ("85.5", None),
+        ("-5", None),
+        ("101", None),
+        ("150", None),
+        ("1e2", None),
+    ],
+)
+def test_parse_secondary_score_accepts_only_a_bare_integer_0_to_100(raw, expected):
+    """Only a bare integer inside the grading range counts as a grade."""
+
+    assert cross_judge._parse_secondary_score(raw) == expected
+
+
+class _FakeCompletions:
+    def __init__(self, content):
+        self._content = content
+        self.calls: list[dict] = []
+
+    async def create(self, **kwargs):
+        self.calls.append(kwargs)
+        message = SimpleNamespace(content=self._content)
+        return SimpleNamespace(choices=[SimpleNamespace(message=message)])
+
+
+class _FakeClient:
+    def __init__(self, content):
+        self.completions = _FakeCompletions(content)
+        self.chat = SimpleNamespace(completions=self.completions)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("content", ["", "N/A", "I would say 85 out of 100", "150", None])
+async def test_grade_one_returns_none_for_an_unusable_response(content):
+    """An unusable judge response never becomes a numeric grade."""
+
+    client = _FakeClient(content)
+
+    assert await cross_judge._grade_one(client, "gpt-4o", "q", "ref", "cand") is None
+
+
+@pytest.mark.asyncio
+async def test_grade_one_returns_the_integer_for_a_valid_response():
+    client = _FakeClient(" 72 ")
+
+    assert await cross_judge._grade_one(client, "gpt-4o", "q", "ref", "cand") == 72
+    assert client.completions.calls[0]["model"] == "gpt-4o"
+
+
+@pytest.mark.asyncio
+async def test_report_counts_an_unparseable_secondary_response_as_ungraded(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+):
+    """An unparseable secondary response is ungraded, never a zero grade."""
+
+    record = {
+        "question_id": "unparseable-secondary",
+        "seed": 17,
+        "answer": "candidate",
+        "score": {"judge_score": 80.0},
+    }
+
+    async def return_unparseable(client, model, question, reference, candidate):
+        return None
+
+    report = await _run_report(
+        monkeypatch,
+        tmp_path,
+        records=[record],
+        questions={
+            "unparseable-secondary": {"question": "question", "reference_answer": "reference"}
+        },
+        grade_one=return_unparseable,
+    )
+
+    assert report["grade_counts"] == {"graded": 0, "ungraded": 1}
+    assert report["per_strategy"]["test_strategy"] == {
+        "n_grades": 0,
+        "graded_count": 0,
+        "ungraded_count": 1,
+    }
+    assert report["per_question"] == [
+        {
+            "question_id": "unparseable-secondary",
+            "strategy": "test_strategy",
+            "seed": 17,
+            "status": "ungraded",
+            "reason": "unparseable_secondary_judge_response",
+        }
+    ]
+    assert report["opus_rank"] == []
+
+
+@pytest.mark.asyncio
+async def test_report_keeps_a_valid_zero_grade(monkeypatch: pytest.MonkeyPatch, tmp_path):
+    """A judge that really answers zero still produces a graded record."""
+
+    record = {
+        "question_id": "real-zero",
+        "seed": 19,
+        "answer": "candidate",
+        "score": {"judge_score": 80.0},
+    }
+
+    async def return_zero(client, model, question, reference, candidate):
+        return 0
+
+    report = await _run_report(
+        monkeypatch,
+        tmp_path,
+        records=[record],
+        questions={"real-zero": {"question": "question", "reference_answer": "reference"}},
+        grade_one=return_zero,
+    )
+
+    assert report["grade_counts"] == {"graded": 1, "ungraded": 0}
+    assert report["per_question"] == [
+        {
+            "question_id": "real-zero",
+            "strategy": "test_strategy",
+            "seed": 19,
+            "primary_raw_score": 80.0,
+            "second_raw_score": 0.0,
+            "disagreement": 80.0,
         }
     ]
 

@@ -61,7 +61,28 @@ Candidate answer: {candidate}
 Score (0-100):"""
 
 
-async def _grade_one(client, model: str, question: str, reference: str, candidate: str) -> int:
+def _parse_secondary_score(raw: str | None) -> int | None:
+    """Return the judged score, or None when the response is not a usable grade.
+
+    The judge prompt asks for a single integer from 0 through 100 and nothing
+    else. Anything else is ungraded evidence. Scraping digits out of prose such
+    as `I would say 85 out of 100` would invent a grade the judge never gave,
+    and clamping `150` down to `100` would do the same.
+    """
+    if not isinstance(raw, str):
+        return None
+    text = raw.strip()
+    if not text.isascii() or not text.isdigit():
+        return None
+    value = int(text)
+    if value < 0 or value > 100:
+        return None
+    return value
+
+
+async def _grade_one(
+    client, model: str, question: str, reference: str, candidate: str
+) -> int | None:
     prompt = JUDGE_PROMPT.format(question=question, reference=reference, candidate=candidate)
     resp = await client.chat.completions.create(
         model=model,
@@ -69,11 +90,7 @@ async def _grade_one(client, model: str, question: str, reference: str, candidat
         max_tokens=8,
         temperature=0,
     )
-    raw = resp.choices[0].message.content.strip()
-    digits = "".join(c for c in raw if c.isdigit())[:3]
-    if not digits:
-        return 0
-    return max(0, min(100, int(digits)))
+    return _parse_secondary_score(resp.choices[0].message.content)
 
 
 def _load_top_strategies(top_k: int) -> list[str]:
@@ -185,6 +202,10 @@ async def main() -> None:
             except Exception as exc:
                 print(f"  [warn] {strategy}: skipped record ({exc})")
                 record_ungraded("secondary_judge_exception")
+                continue
+            if gpt is None:
+                print(f"  [warn] {strategy}: unusable judge response for {qid}")
+                record_ungraded("unparseable_secondary_judge_response")
                 continue
             opus_scores.append(opus)
             gpt_scores.append(float(gpt))
