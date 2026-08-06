@@ -25,7 +25,7 @@ export default function Nav() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-8">
           <Link href="/" className="font-bold text-lg tracking-tight" style={{ color: "var(--foreground)" }}>
-            Memory Arena
+            Agent Memory Testbench
           </Link>
           <div className="hidden sm:flex items-center gap-1">
             {links.map((l) => {

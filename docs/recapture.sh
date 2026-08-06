@@ -1,42 +1,53 @@
 #!/usr/bin/env bash
-# Re-capture screenshots and re-record the demo GIF after a fresh benchmark run.
-# Assumes:
-#   - results/longmemeval-s_*.json populated for all 16 strategies
-#   - virtualenv at .venv/ activated
-#   - Docker neo4j + postgres running
+# Re-capture the README screenshots from a clean wheel.
+#
+# The pictures must show what `pip install memory-arena` gives a reader, so this
+# builds the wheel, installs it into a throwaway virtual environment, serves the
+# bundled historical snapshot with no provider key and no container, and shoots
+# every README image against that server.
+#
+#     ./docs/recapture.sh
+#
+# Re-record the GIF with ./docs/record_demo.sh.
 
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
+REPO="$PWD"
+PYTHON="${MEMORY_ARENA_PYTHON:-$REPO/.venv/bin/python}"
+[ -x "$PYTHON" ] || PYTHON="$(command -v python3)"
 
-# Kill any existing serve and free its port.
-PID=$(lsof -ti :8765 2>/dev/null || true)
-if [ -n "$PID" ]; then
-  kill "$PID" 2>/dev/null || true
-fi
+WORKDIR=$(mktemp -d /tmp/memory-arena-shots-XXXXXX)
+trap 'kill "${SERVER_PID:-}" 2>/dev/null || true; rm -rf "$WORKDIR"' EXIT
+mkdir -p "$WORKDIR/stage"
 
-# Restart serve with the latest results.
-memory-arena serve --port 8765 > /tmp/memory-arena-serve.log 2>&1 &
-disown
+echo "[build] wheel"
+rm -rf dist
+"$PYTHON" -m build >/dev/null
+WHEEL=$(ls dist/memory_arena-*-py3-none-any.whl)
 
-# Wait for /api/health.
-until curl -s http://localhost:8765/api/health > /dev/null 2>&1; do sleep 1; done
-echo "[serve] up"
+echo "[venv] install $WHEEL"
+python3 -m venv "$WORKDIR/venv"
+"$WORKDIR/venv/bin/pip" -q install "$REPO/$WHEEL"
 
-agent-browser open "http://localhost:8765/" >/dev/null
-agent-browser wait 2000 >/dev/null
-agent-browser screenshot --full docs/screenshot-home.png >/dev/null
-echo "[home] captured"
+echo "[server] start"
+(
+  cd "$WORKDIR/stage"
+  env -u ANTHROPIC_API_KEY -u OPENAI_API_KEY -u MEM_ARENA_RESULTS_PATH \
+      -u MEM_ARENA_DATASETS_PATH BROWSER=true \
+      "$WORKDIR/venv/bin/memory-arena" demo --port 8824 > "$WORKDIR/server.log" 2>&1 &
+  echo $! > "$WORKDIR/server.pid"
+)
+SERVER_PID=$(cat "$WORKDIR/server.pid")
+PORT=""
+for _ in $(seq 1 40); do
+  PORT=$(grep -o "127.0.0.1:[0-9]*" "$WORKDIR/server.log" | head -1 | cut -d: -f2 || true)
+  [ -n "$PORT" ] && curl -sf "http://127.0.0.1:$PORT/api/health" >/dev/null 2>&1 && break
+  sleep 1
+done
+[ -n "$PORT" ] || { echo "server never came up" >&2; cat "$WORKDIR/server.log" >&2; exit 1; }
+echo "[server] port $PORT"
 
-agent-browser open "http://localhost:8765/benchmark/" >/dev/null
-agent-browser wait 3000 >/dev/null
-agent-browser screenshot --full docs/screenshot-benchmark.png >/dev/null
-echo "[benchmark] captured"
-
-agent-browser open "http://localhost:8765/recall-lab/" >/dev/null
-agent-browser wait 2000 >/dev/null
-agent-browser screenshot --full docs/screenshot-recall-lab.png >/dev/null
-echo "[recall-lab] captured"
-
-vhs docs/demo.tape >/dev/null
-echo "[demo gif] recorded"
+echo "[shots]"
+"$PYTHON" scripts/capture_screenshots.py --base "http://127.0.0.1:$PORT" --out docs
+echo "[done] read every regenerated PNG back before committing it."

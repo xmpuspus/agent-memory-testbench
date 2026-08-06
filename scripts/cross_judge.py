@@ -22,6 +22,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import math
 import os
 from pathlib import Path
 from statistics import mean
@@ -61,7 +62,28 @@ Candidate answer: {candidate}
 Score (0-100):"""
 
 
-async def _grade_one(client, model: str, question: str, reference: str, candidate: str) -> int:
+def _parse_secondary_score(raw: str | None) -> int | None:
+    """Return the judged score, or None when the response is not a usable grade.
+
+    The judge prompt asks for a single integer from 0 through 100 and nothing
+    else. Anything else is ungraded evidence. Scraping digits out of prose such
+    as `I would say 85 out of 100` would invent a grade the judge never gave,
+    and clamping `150` down to `100` would do the same.
+    """
+    if not isinstance(raw, str):
+        return None
+    text = raw.strip()
+    if not text.isascii() or not text.isdigit():
+        return None
+    value = int(text)
+    if value < 0 or value > 100:
+        return None
+    return value
+
+
+async def _grade_one(
+    client, model: str, question: str, reference: str, candidate: str
+) -> int | None:
     prompt = JUDGE_PROMPT.format(question=question, reference=reference, candidate=candidate)
     resp = await client.chat.completions.create(
         model=model,
@@ -69,11 +91,7 @@ async def _grade_one(client, model: str, question: str, reference: str, candidat
         max_tokens=8,
         temperature=0,
     )
-    raw = resp.choices[0].message.content.strip()
-    digits = "".join(c for c in raw if c.isdigit())[:3]
-    if not digits:
-        return 0
-    return max(0, min(100, int(digits)))
+    return _parse_secondary_score(resp.choices[0].message.content)
 
 
 def _load_top_strategies(top_k: int) -> list[str]:
@@ -89,14 +107,58 @@ def _load_seed_records(strategy: str) -> list[dict]:
     out = []
     for p in sorted(RESULTS_DIR.glob(f"longmemeval-s_{strategy}_seed*.json")):
         d = json.loads(p.read_text())
+        seed = (d.get("metadata") or {}).get("seed")
         for rec in d.get("recall_records", []):
-            out.append(rec)
+            out.append({**rec, "seed": rec.get("seed", seed)})
     return out
 
 
-def _spearman(opus_rank: list[int], gpt_rank: list[int]) -> float:
+def _primary_raw_score(record: dict) -> float | None:
+    """Return the stored primary grade, or None when the record holds no grade.
+
+    The grade must be a finite number from 0 through 100. An earlier version
+    clamped instead, which turned `NaN` into a perfect 100 and raised on text.
+    A clamp hides a broken record behind a plausible number.
+    """
+    score = record.get("score") or {}
+    value = score.get("judge_score") if isinstance(score, dict) else None
+    if isinstance(value, bool) or not isinstance(value, int | float | str):
+        return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(number) or number < 0.0 or number > 100.0:
+        return None
+    return number
+
+
+def _primary_failure_reason(record: dict) -> str:
+    """Say whether the primary grade is absent or present but unusable."""
+    score = record.get("score")
+    if score is None or (isinstance(score, dict) and score.get("judge_score") is None):
+        return "missing_primary_raw_score"
+    return "invalid_primary_raw_score"
+
+
+def _ungraded_identity(record: dict, strategy: str, reason: str) -> dict:
+    return {
+        "question_id": record.get("question_id", ""),
+        "strategy": strategy,
+        "seed": record.get("seed"),
+        "status": "ungraded",
+        "reason": reason,
+    }
+
+
+def _spearman(opus_rank: list[int], gpt_rank: list[int]) -> float | None:
+    """Rank correlation, or None when two ranked strategies do not exist.
+
+    Zero means the two judges agree no better than chance. Too little evidence
+    to say means something else, so it does not get to print as a number.
+    """
     if len(opus_rank) != len(gpt_rank) or len(opus_rank) < 2:
-        return 0.0
+        return None
     n = len(opus_rank)
     diffs_sq = sum((o - g) ** 2 for o, g in zip(opus_rank, gpt_rank, strict=True))
     return 1 - (6 * diffs_sq) / (n * (n**2 - 1))
@@ -122,6 +184,8 @@ async def main() -> None:
 
     questions = _load_questions()
     per_strategy: dict[str, dict] = {}
+    per_question: list[dict] = []
+    grade_counts = {"graded": 0, "ungraded": 0}
     for strategy in strategies:
         recs = _load_seed_records(strategy)
         if not recs:
@@ -129,34 +193,73 @@ async def main() -> None:
             continue
         opus_scores: list[float] = []
         gpt_scores: list[float] = []
+        ungraded_count = 0
         for rec in recs:
+
+            def record_ungraded(reason: str) -> None:
+                nonlocal ungraded_count
+                ungraded_count += 1
+                grade_counts["ungraded"] += 1
+                per_question.append(_ungraded_identity(rec, strategy, reason))
+
+            opus = _primary_raw_score(rec)
+            if opus is None:
+                record_ungraded(_primary_failure_reason(rec))
+                continue
             qid = rec.get("question_id", "")
             qmeta = questions.get(qid)
             if not qmeta:
+                record_ungraded("missing_question_metadata")
                 continue
-            q = qmeta["question"]
-            ref = qmeta["reference_answer"]
+            q = qmeta.get("question") or ""
+            ref = qmeta.get("reference_answer") or ""
             cand = rec.get("answer") or ""
-            score_obj = rec.get("score") or {}
-            if isinstance(score_obj, dict):
-                opus = float(score_obj.get("accuracy", 0)) * 100
-            else:
-                opus = float(score_obj or 0)
-            if not q or not ref or not cand:
+            if not q.strip():
+                record_ungraded("blank_question")
+                continue
+            if not ref.strip():
+                record_ungraded("blank_reference_answer")
+                continue
+            if not cand.strip():
+                record_ungraded("blank_candidate_answer")
                 continue
             try:
                 gpt = await _grade_one(client, args.judge, q, ref, cand)
             except Exception as exc:
                 print(f"  [warn] {strategy}: skipped record ({exc})")
+                record_ungraded("secondary_judge_exception")
+                continue
+            if gpt is None:
+                print(f"  [warn] {strategy}: unusable judge response for {qid}")
+                record_ungraded("unparseable_secondary_judge_response")
                 continue
             opus_scores.append(opus)
             gpt_scores.append(float(gpt))
+            grade_counts["graded"] += 1
+            per_question.append(
+                {
+                    "question_id": qid,
+                    "strategy": strategy,
+                    "seed": rec.get("seed"),
+                    "primary_raw_score": opus,
+                    "second_raw_score": float(gpt),
+                    "disagreement": abs(opus - float(gpt)),
+                }
+            )
         if not opus_scores:
+            per_strategy[strategy] = {
+                "n_grades": 0,
+                "graded_count": 0,
+                "ungraded_count": ungraded_count,
+            }
+            print(f"  [skip] {strategy}: no completed grades")
             continue
         per_strategy[strategy] = {
             "opus_mean": mean(opus_scores),
             "gpt4o_mean": mean(gpt_scores),
             "n_grades": len(opus_scores),
+            "graded_count": len(opus_scores),
+            "ungraded_count": ungraded_count,
         }
         print(
             f"  [done] {strategy}: opus={mean(opus_scores):.1f} "
@@ -164,8 +267,11 @@ async def main() -> None:
         )
 
     # Spearman rank-correlation across the top strategies.
-    opus_rank = sorted(per_strategy, key=lambda s: -per_strategy[s]["opus_mean"])
-    gpt_rank = sorted(per_strategy, key=lambda s: -per_strategy[s]["gpt4o_mean"])
+    ranked_strategies = {
+        strategy: result for strategy, result in per_strategy.items() if result["graded_count"]
+    }
+    opus_rank = sorted(ranked_strategies, key=lambda s: -ranked_strategies[s]["opus_mean"])
+    gpt_rank = sorted(ranked_strategies, key=lambda s: -ranked_strategies[s]["gpt4o_mean"])
     name_to_opus_rank = {s: i for i, s in enumerate(opus_rank)}
     name_to_gpt_rank = {s: i for i, s in enumerate(gpt_rank)}
     rho = _spearman(
@@ -178,16 +284,28 @@ async def main() -> None:
         json.dumps(
             {
                 "judges": ["claude-opus-4-7", args.judge],
+                "score_semantics": {
+                    "primary": "raw_judge_score_0_100",
+                    "secondary": "raw_judge_score_0_100",
+                },
+                "grade_counts": grade_counts,
                 "spearman_rank_correlation": rho,
                 "opus_rank": opus_rank,
                 f"{args.judge}_rank": gpt_rank,
                 "per_strategy": per_strategy,
+                "per_question": per_question,
             },
             indent=2,
         )
     )
     print(f"\nWrote {REPORT}")
-    print(f"Spearman rank correlation (opus vs {args.judge}): {rho:+.3f}")
+    if rho is None:
+        print(
+            f"Spearman rank correlation (opus vs {args.judge}): "
+            "not available, fewer than two graded strategies"
+        )
+    else:
+        print(f"Spearman rank correlation (opus vs {args.judge}): {rho:+.3f}")
 
 
 if __name__ == "__main__":

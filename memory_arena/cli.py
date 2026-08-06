@@ -1,4 +1,4 @@
-"""Memory Arena CLI — multi-stage pipeline.
+"""Agent Memory Testbench CLI — multi-stage pipeline.
 
 init-corpus -> ingest-sessions -> build-memory -> benchmark -> report -> serve
 
@@ -17,8 +17,9 @@ from rich.logging import RichHandler
 app = typer.Typer(
     name="memory-arena",
     help=(
-        "Benchmark agent-memory architectures: Mem0, Graphiti, Cognee, "
-        "LangMem, Memori, naive vector, recency window, full context."
+        "Agent Memory Testbench (formerly Memory Arena): benchmark agent memory "
+        "from retrieval to answer. Run `demo` to inspect the bundled historical "
+        "evidence without an API key."
     ),
     no_args_is_help=True,
 )
@@ -177,7 +178,10 @@ def build_memory(
 def benchmark(
     corpus: str = typer.Option("longmemeval-s", help="Corpus name"),
     strategy: str = typer.Option("all", help="Comma-separated names or 'all'"),
-    questions: str = typer.Option("smoke", help="Question subset: smoke, full, or path"),
+    questions: str = typer.Option(
+        "preflight",
+        help="Question subset: preflight, historical-v0.1.8, full, or path",
+    ),
     cost_cap: float = typer.Option(5.0, help="Halt if cumulative cost exceeds (USD)"),
     top_k: int = typer.Option(5, "--top-k", help="Held constant across all strategies."),
     seed: int | None = typer.Option(
@@ -283,7 +287,7 @@ def report(
         sys.stdout.write(json.dumps(rows, indent=2) + "\n")
         return
 
-    console.print(f"[bold]Memory Arena Report: {corpus}[/bold]")
+    console.print(f"[bold]Agent Memory Testbench Report: {corpus}[/bold]")
     for row in rows:
         f1 = row.get("abstention_f1")
         f1_str = f"{f1:.2f}" if f1 is not None else "—"
@@ -372,6 +376,27 @@ def arena(
     serve(host=host, port=port)
 
 
+def _demo_banner_lines(port: int) -> list[str]:
+    """The lines the demo prints on start.
+
+    The demo is the one command a reader runs before they trust anything, so
+    the banner states what it serves and what it does not need. Both claims are
+    checked: the snapshot id comes from the bundled manifest, and the demo runs
+    with no provider key and no container.
+    """
+    from memory_arena.evidence.bundled import load_snapshot_manifest
+    from memory_arena.paths import results_root
+
+    manifest = load_snapshot_manifest(results_root())
+    snapshot = manifest.get("snapshot_id") or "no bundled snapshot"
+    status = manifest.get("status", "unavailable")
+    return [
+        f"dashboard at http://127.0.0.1:{port}/",
+        f"serving snapshot {snapshot} ({status})",
+        "Inspect the evidence locally. No API key. No Docker.",
+    ]
+
+
 @app.command()
 def demo(
     host: str = typer.Option("127.0.0.1", "--host", help="Host to bind to (default 127.0.0.1)"),
@@ -397,7 +422,8 @@ def demo(
     actual_port = _pick_free_port(port if port != 0 else 0)
 
     _warn_if_lan_bind(host)
-    console.print(f"dashboard at http://127.0.0.1:{actual_port}/")
+    for line in _demo_banner_lines(actual_port):
+        console.print(line)
 
     def _open():
         webbrowser.open(f"http://127.0.0.1:{actual_port}/")
@@ -429,7 +455,7 @@ def health(fmt: str = typer.Option("rich", "--format", help="rich | json")):
         sys.stdout.write(json.dumps(state, indent=2) + "\n")
         return
 
-    console.print("[bold]Memory Arena Health[/bold]")
+    console.print("[bold]Agent Memory Testbench Health[/bold]")
     console.print(f"  Anthropic key: {'set' if state['api_keys']['anthropic'] else 'missing'}")
     console.print(f"  OpenAI key:    {'set' if state['api_keys']['openai'] else 'missing'}")
     console.print(f"  Strategies:    {', '.join(state['strategies_registered'])}")

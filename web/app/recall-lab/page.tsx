@@ -7,11 +7,15 @@ import {
   STRATEGY_COLORS,
   STRATEGY_DESCRIPTIONS,
   CORPORA,
+  FAILURE_LABELS,
   fetchBenchmarkResults,
   fetchRecallRecords,
+  type BenchmarkDataState,
+  type FailureClass,
   type Strategy,
   type RecallRecord,
 } from "@/lib/api";
+import BenchmarkDataStatus from "@/components/BenchmarkDataStatus";
 
 type Verdict = "HIT" | "MISS" | "N/A";
 
@@ -25,6 +29,30 @@ function verdict(rec: RecallRecord, measurable: boolean | null): Verdict {
   return rec.ir.session_hit_at_k > 0 ? "HIT" : "MISS";
 }
 
+function Field({
+  label,
+  value,
+  mono = false,
+}: {
+  label: string;
+  value: string;
+  mono?: boolean;
+}) {
+  return (
+    <div className="space-y-1">
+      <div className="font-semibold uppercase tracking-wide opacity-70">
+        {label}
+      </div>
+      <div
+        className={`leading-relaxed ${mono ? "font-mono break-all" : ""}`}
+        style={{ color: "var(--foreground)" }}
+      >
+        {value}
+      </div>
+    </div>
+  );
+}
+
 function fmtMs(value: number | undefined): string {
   if (value === undefined || value === null) return "—";
   if (value < 1000) return `${value.toFixed(0)}ms`;
@@ -33,21 +61,32 @@ function fmtMs(value: number | undefined): string {
 
 export default function RecallLabPage() {
   const [corpus] = useState(CORPORA[0]?.name ?? "longmemeval-s");
+  const [dataState, setDataState] = useState<BenchmarkDataState | null>(null);
   const [availableStrategies, setAvailableStrategies] = useState<string[]>([]);
   const [strategy, setStrategy] = useState<string>("");
   const [data, setData] = useState<{
     recall_at_k_measurable: boolean | null;
     top_k: number | null;
+    judge_fail_threshold: number | null;
+    failure_counts: Partial<Record<FailureClass, number>>;
     records: RecallRecord[];
   } | null>(null);
   const [loading, setLoading] = useState(false);
   const [notFound, setNotFound] = useState(false);
+  const [failureFilter, setFailureFilter] = useState<FailureClass | "all">("all");
 
   // Populate strategy dropdown from the benchmark results so we only show
   // strategies that actually have a result file for this corpus.
   useEffect(() => {
-    fetchBenchmarkResults(corpus).then((rows) => {
-      const names = rows
+    fetchBenchmarkResults(corpus).then((dataState) => {
+      setDataState(dataState);
+      if (dataState.state === "unavailable") {
+        setAvailableStrategies([]);
+        setStrategy("");
+        setData(null);
+        return;
+      }
+      const names = dataState.rows
         .map((r) => r.strategy as string)
         .filter((n): n is string => typeof n === "string" && n.length > 0);
       // Keep declaration order from STRATEGIES so the dropdown is stable.
@@ -78,6 +117,8 @@ export default function RecallLabPage() {
       setData({
         recall_at_k_measurable: res.recall_at_k_measurable ?? null,
         top_k: res.top_k ?? null,
+        judge_fail_threshold: res.judge_fail_threshold ?? null,
+        failure_counts: res.failure_counts ?? {},
         records: res.records ?? [],
       });
     });
@@ -98,6 +139,19 @@ export default function RecallLabPage() {
   }, [data]);
 
   const measurable = data?.recall_at_k_measurable;
+
+  const visibleRecords = useMemo(() => {
+    if (!data) return [];
+    if (failureFilter === "all") return data.records;
+    return data.records.filter((r) => r.failure_class === failureFilter);
+  }, [data, failureFilter]);
+
+  // Offer only the classes this strategy actually produced, so no filter
+  // promises records that do not exist.
+  const filterOptions = useMemo(() => {
+    const counts = data?.failure_counts ?? {};
+    return (Object.keys(counts) as FailureClass[]).filter((k) => (counts[k] ?? 0) > 0);
+  }, [data]);
 
   return (
     <div className="max-w-6xl mx-auto px-6 py-12 space-y-12">
@@ -154,6 +208,35 @@ export default function RecallLabPage() {
             </span>
           )}
         </div>
+        {filterOptions.length > 0 && (
+          <div className="flex flex-wrap items-center gap-3">
+            <label className="text-sm" style={{ color: "var(--muted)" }}>
+              Failure
+            </label>
+            <select
+              className="text-sm px-3 py-1.5 rounded border"
+              value={failureFilter}
+              onChange={(e) => setFailureFilter(e.target.value as FailureClass | "all")}
+              style={{
+                borderColor: "var(--border)",
+                background: "var(--card)",
+                color: "var(--foreground)",
+              }}
+            >
+              <option value="all">All questions ({counts.total})</option>
+              {filterOptions.map((k) => (
+                <option key={k} value={k}>
+                  {FAILURE_LABELS[k]} ({data?.failure_counts[k]})
+                </option>
+              ))}
+            </select>
+            {data?.judge_fail_threshold != null && (
+              <span className="text-xs" style={{ color: "var(--muted)" }}>
+                A judge score at or under {data.judge_fail_threshold} counts as a wrong answer.
+              </span>
+            )}
+          </div>
+        )}
         {strategy && STRATEGY_DESCRIPTIONS[strategy as Strategy] && (
           <p
             className="text-xs leading-relaxed max-w-3xl pt-1"
@@ -163,6 +246,15 @@ export default function RecallLabPage() {
           </p>
         )}
       </section>
+
+      {dataState?.state === "historical" && (
+        <BenchmarkDataStatus state="historical" snapshot={dataState.snapshot} />
+      )}
+
+      {dataState?.state === "unavailable" ? (
+        <BenchmarkDataStatus state="unavailable" message={dataState.message} />
+      ) : (
+        <>
 
       {measurable === false && (
         <section
@@ -205,10 +297,12 @@ export default function RecallLabPage() {
             className="text-xl font-semibold"
             style={{ color: "var(--foreground)" }}
           >
-            HIT / MISS by question
+            {failureFilter === "all"
+              ? "HIT / MISS by question"
+              : `${FAILURE_LABELS[failureFilter]}: ${visibleRecords.length} of ${counts.total} questions`}
           </h2>
           <div className="space-y-3">
-            {data.records.map((rec) => {
+            {visibleRecords.map((rec) => {
               const v = verdict(rec, data.recall_at_k_measurable);
               const color =
                 v === "HIT"
@@ -303,11 +397,72 @@ export default function RecallLabPage() {
                       </div>
                     </div>
                   </div>
+                  {rec.question && (
+                    <details className="text-xs pt-1">
+                      <summary
+                        className="cursor-pointer select-none"
+                        style={{ color: "var(--muted)" }}
+                      >
+                        {rec.failure_class
+                          ? FAILURE_LABELS[rec.failure_class]
+                          : "Evidence"}
+                        {rec.judge_score != null
+                          ? ` · judge ${rec.judge_score.toFixed(0)}/100`
+                          : ""}
+                      </summary>
+                      <div
+                        className="pt-3 space-y-3"
+                        style={{ color: "var(--muted)" }}
+                      >
+                        <Field label="Question" value={rec.question} />
+                        <Field
+                          label="Expected answer"
+                          value={rec.expected_answer ?? "(not in the question file)"}
+                        />
+                        <Field
+                          label="Gold session"
+                          value={
+                            rec.gold_session_ids?.length
+                              ? rec.gold_session_ids.join(", ")
+                              : "(none labelled)"
+                          }
+                          mono
+                        />
+                        <Field
+                          label="Retrieval"
+                          value={`session ${rec.session_hit ? "hit" : "miss"}, turn ${
+                            rec.turn_hit === null || rec.turn_hit === undefined
+                              ? "not measured"
+                              : rec.turn_hit
+                                ? "hit"
+                                : "miss"
+                          }`}
+                        />
+                        <Field label="Answer given" value={rec.answer ?? "(none)"} />
+                        {rec.score?.judge_rationale && (
+                          <Field
+                            label="Judge rationale (primary judge)"
+                            value={rec.score.judge_rationale}
+                          />
+                        )}
+                        <Field
+                          label="Structural checks"
+                          value={`${
+                            rec.score?.structural_pass ? "pass" : "fail"
+                          }, cited a labelled source: ${
+                            rec.score?.sources_pass ? "yes" : "no"
+                          }`}
+                        />
+                      </div>
+                    </details>
+                  )}
                 </div>
               );
             })}
           </div>
         </section>
+      )}
+        </>
       )}
     </div>
   );

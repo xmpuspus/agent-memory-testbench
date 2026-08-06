@@ -1,0 +1,94 @@
+name: Deploy Pages
+
+# The public site is the same Next.js export the wheel bundles, plus the API
+# responses frozen to static files. A project site lives under /<repo>/, so this
+# build sets a base path. The wheel serves from the root and must keep the
+# base-path-free build in memory_arena/static/, so this job never writes there.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/configure-pages@v5
+        id: pages
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - run: pip install -e .
+
+      - name: Install web dependencies
+        working-directory: web
+        run: npm ci
+
+      - name: Build the static export under the project base path
+        working-directory: web
+        env:
+          NEXT_PUBLIC_BASE_PATH: ${{ steps.pages.outputs.base_path }}
+          NEXT_PUBLIC_API_URL: ${{ steps.pages.outputs.base_path }}
+        run: npm run build
+
+      - name: Freeze the API responses next to the export
+        run: python scripts/build_pages_api.py --out web/out
+
+      - name: Confirm the export carries the historical snapshot
+        run: |
+          python - <<'PY'
+          import json, pathlib, sys
+          out = pathlib.Path("web/out")
+          manifest = json.loads(
+              pathlib.Path("memory_arena/data/results_snapshot/manifest.json").read_text()
+          )
+          declared = list(manifest["included_strategies"])
+          body = json.loads((out / "api/benchmark/longmemeval-s").read_text())
+          snapshot = body.get("snapshot") or {}
+          rows = [row["strategy"] for row in body.get("results") or []]
+          if snapshot.get("status") != "historical":
+              sys.exit(f"snapshot status is {snapshot.get('status')}")
+          if rows != declared:
+              sys.exit(f"rows {rows} do not match the manifest {declared}")
+          if not (out / ".nojekyll").exists():
+              sys.exit("missing .nojekyll, Jekyll would drop the _next assets")
+          home = (out / "index.html").read_text()
+          for needed in ("Agent Memory Testbench", snapshot["snapshot_id"]):
+              if needed not in home:
+                  sys.exit(f"home page does not name {needed!r}")
+          print(f"{len(rows)} rows, snapshot {snapshot['snapshot_id']}")
+          PY
+
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: web/out
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/deploy-pages@v4
+        id: deployment

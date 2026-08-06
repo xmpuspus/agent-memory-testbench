@@ -1,14 +1,15 @@
 """Question loading for memory-arena.
 
 Sources, in order of preference:
-    1. datasets/<corpus>/processed/questions.jsonl       (after `ingest-sessions`)
-    2. datasets/<corpus>/questions/smoke_synthetic/*.yaml (the canonical smoke subset)
-    3. datasets/<corpus>/questions/smoke/*.yaml          (legacy smoke layout)
-    4. datasets/<corpus>/questions/*.yaml                (full set, when present)
+    1. datasets/<corpus>/questions/smoke_synthetic/*.yaml (preflight subset)
+    2. datasets/<corpus>/processed/questions.jsonl        (historical or full)
+    3. datasets/<corpus>/questions/smoke/*.yaml           (legacy layout)
+    4. datasets/<corpus>/questions/*.yaml                 (full set, when present)
 """
 
 from __future__ import annotations
 
+import warnings
 from pathlib import Path
 
 import yaml
@@ -17,6 +18,7 @@ from memory_arena.sessions.loaders import load_questions_jsonl
 from memory_arena.sessions.schema import (
     CATEGORIES,
     Constraints,
+    FactAssertion,
     GroundTruth,
     QuestionRecord,
     category_to_tier,
@@ -50,6 +52,10 @@ def _yaml_to_record(item: dict) -> QuestionRecord:
         supporting_session_ids=list(gt_raw.get("supporting_session_ids", []) or []),
         supporting_turn_ids=list(gt_raw.get("supporting_turn_ids", []) or []),
         valid_as_of=gt_raw.get("valid_as_of"),
+        fact_versions=[
+            FactAssertion.model_validate(version)
+            for version in gt_raw.get("fact_versions", []) or []
+        ],
     )
     constraints_raw = item.get("constraints", {}) or {}
     constraints = Constraints(
@@ -73,12 +79,45 @@ def _yaml_to_record(item: dict) -> QuestionRecord:
 
 def load_memory_questions(
     corpus: str = "longmemeval-s",
-    subset: str = "smoke",
+    subset: str = "preflight",
 ) -> list[QuestionRecord]:
     """Load questions from JSONL or YAML."""
     from memory_arena.paths import datasets_root
 
     base = datasets_root() / corpus
+
+    if subset == "historical-v0.1.8":
+        return load_questions_jsonl(corpus)
+
+    if subset == "smoke":
+        warnings.warn(
+            "The 'smoke' question subset is deprecated; use 'preflight' instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+
+    if subset in {"preflight", "smoke"}:
+        smoke_dir = base / "questions" / "smoke_synthetic"
+        if smoke_dir.exists():
+            return _load_yaml_dir(smoke_dir)
+        smoke_dir = base / "questions" / "smoke"
+        if smoke_dir.exists():
+            return _load_yaml_dir(smoke_dir)
+
+    if subset == "full":
+        jsonl_records = load_questions_jsonl(corpus)
+        if corpus == "longmemeval-s" and len(jsonl_records) != 500:
+            raise ValueError(
+                "LongMemEval V1 full question set requires 500 processed questions; "
+                f"found {len(jsonl_records)}."
+            )
+        if jsonl_records:
+            return jsonl_records
+        # fall through to YAML
+        yaml_dir = base / "questions"
+        if yaml_dir.exists():
+            return _load_yaml_dir(yaml_dir, recursive=False)
+        return []
 
     # Custom path support: subset can be a directory or file.
     custom = Path(subset)
@@ -88,20 +127,14 @@ def load_memory_questions(
         if custom.is_dir():
             return _load_yaml_dir(custom)
 
-    if subset == "full":
-        jsonl = base / "processed" / "questions.jsonl"
-        if jsonl.exists():
-            return load_questions_jsonl(corpus)
-        # fall through to YAML
-        yaml_dir = base / "questions"
-        if yaml_dir.exists():
-            return _load_yaml_dir(yaml_dir, recursive=False)
-        return []
+    if subset not in {"preflight", "smoke"}:
+        raise ValueError(
+            f"Unknown question subset {subset!r}. Expected preflight, "
+            "historical-v0.1.8, full, smoke, or an existing YAML file/directory path."
+        )
 
-    # smoke (default). On-disk layout uses smoke_synthetic/ (the bundled
-    # LongMemEval-S subset of synthetic abstention questions); older
-    # corpora may still use smoke/. Try the canonical path first, fall
-    # back to legacy.
+    # On-disk layout uses smoke_synthetic/ (the bundled LongMemEval-S subset
+    # of synthetic abstention questions); older corpora may still use smoke/.
     smoke_dir = base / "questions" / "smoke_synthetic"
     if smoke_dir.exists():
         return _load_yaml_dir(smoke_dir)

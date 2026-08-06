@@ -158,8 +158,7 @@ def _check_cost_cap(
     if context:
         suffix += f" of {context}"
     msg = (
-        f"cost cap reached: ${spent:.2f} (cap=${cost_cap:.2f}, "
-        f"overshoot=${overshoot:.2f}){suffix}"
+        f"cost cap reached: ${spent:.2f} (cap=${cost_cap:.2f}, overshoot=${overshoot:.2f}){suffix}"
     )
     # Only record the breach once per strategy/phase so repeated post-call
     # checks don't spam errors_list. Detect via a flag-like sentinel: scan
@@ -366,8 +365,7 @@ async def _run_strategy(
             progress.update(
                 task_id,
                 description=(
-                    f"[cyan]{strategy.name}[/cyan] "
-                    f"[dim]${cumulative_cost[strategy.name]:.3f}[/dim]"
+                    f"[cyan]{strategy.name}[/cyan] [dim]${cumulative_cost[strategy.name]:.3f}[/dim]"
                 ),
             )
         # The breaching call's record is now persisted. Halt before the
@@ -520,7 +518,7 @@ def _resolve_strategies(strategy: str) -> list[MemoryStrategy]:
 async def run_memory_benchmark(
     corpus: str = "longmemeval-s",
     strategy: str = "all",
-    questions: str = "smoke",
+    questions: str = "preflight",
     cost_cap: float = 5.0,
     top_k: int = 5,
     seed: int | None = None,

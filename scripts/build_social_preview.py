@@ -17,7 +17,12 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-RESULTS = REPO_ROOT / "results"
+# The card names the bundled historical snapshot, so it must read that snapshot.
+# The working `results/` directory holds every strategy ever run, including five
+# the snapshot does not contain, and reading it put those names under a heading
+# that says 16 strategies.
+SNAPSHOT = REPO_ROOT / "memory_arena" / "data" / "results_snapshot"
+MANIFEST = SNAPSHOT / "manifest.json"
 OUT = REPO_ROOT / "docs" / "social-preview.png"
 
 NAVY = "#1f3b73"
@@ -28,11 +33,26 @@ GRID = "#cdd5e0"
 
 
 def _load_summaries() -> list[dict]:
+    """The snapshot's own summaries, checked against its manifest inventory."""
+    manifest = json.loads(MANIFEST.read_text())
+    declared = sorted(manifest["included_strategies"])
     out = []
-    for p in RESULTS.glob("longmemeval-s_*_summary.json"):
+    for p in SNAPSHOT.glob("longmemeval-s_*_summary.json"):
         out.append(json.loads(p.read_text()))
+    found = sorted(r["strategy"] for r in out)
+    if found != declared:
+        raise SystemExit(f"snapshot summaries {found} do not match the manifest {declared}")
     out.sort(key=lambda r: -r.get("accuracy", 0.0))
     return out
+
+
+def _snapshot_caption() -> str:
+    manifest = json.loads(MANIFEST.read_text())
+    return (
+        f"Historical snapshot {manifest['snapshot_id']}: "
+        f"{len(manifest['included_strategies'])} strategies, "
+        f"{manifest['question_count']} questions, {manifest['category_count']} categories"
+    )
 
 
 def build() -> Path:
@@ -46,7 +66,7 @@ def build() -> Path:
     ax.text(
         4,
         90,
-        "Memory Arena",
+        "Agent Memory Testbench",
         fontsize=42,
         weight="bold",
         color=INK,
@@ -54,14 +74,14 @@ def build() -> Path:
     ax.text(
         4,
         81,
-        "Same chat-session corpus, same evaluator, same configs",
+        "Benchmark agent memory from retrieval to answer.",
         fontsize=18,
         color=SUB,
     )
     ax.text(
         4,
         76,
-        "20 strategies · LongMemEval-S smoke (16 questions, 4 categories, judge: Opus 4.7)",
+        _snapshot_caption(),
         fontsize=12,
         color=SUB,
         style="italic",
@@ -71,7 +91,7 @@ def build() -> Path:
     ax.text(
         50,
         66,
-        '"A 30-line vector store beats every funded memory SDK. None is close to solved."',
+        "Past evidence you can open, not a present ranking. Mixed source commits and seed counts.",
         fontsize=15,
         color=INK,
         style="italic",
@@ -106,13 +126,13 @@ def build() -> Path:
                 weight="bold",
             )
 
-    _row("Top of leaderboard", 4, tops, NAVY)
-    _row("Floor", 56, bots, CORAL)
+    _row("Highest in the snapshot", 4, tops, NAVY)
+    _row("Lowest in the snapshot", 56, bots, CORAL)
 
     # Footer link + reproducibility hook
     footer = (
-        "github.com/xmpuspus/memory-arena  |  MIT  |  "
-        "pip install memory-arena  |  Reproduce in 5 min for ~$0.50"
+        "github.com/xmpuspus/agent-memory-testbench  |  MIT  |  "
+        "pip install memory-arena  |  memory-arena demo: no API key, no Docker"
     )
     ax.text(
         50,
@@ -124,7 +144,7 @@ def build() -> Path:
     )
 
     OUT.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(OUT, dpi=100, bbox_inches="tight", pad_inches=0.2, facecolor="white")
+    fig.savefig(OUT, dpi=100, facecolor="white")
     plt.close(fig)
     print(f"Wrote {OUT} ({OUT.stat().st_size / 1024:.1f} KB)")
     return OUT

@@ -1,89 +1,98 @@
-"""Capture dashboard screenshots for the README.
+"""Capture the README screenshots from a running dashboard.
 
-Starts a memory-arena server in the background, navigates to each page, and
-saves a 1440x900 PNG to docs/. Idempotent — kills the server when done.
+Point this at the wheel's `memory-arena demo` so the pictures show what a reader
+gets, not what a checkout shows. `docs/recapture.sh` starts that server.
 
-Usage:
-    python scripts/capture_screenshots.py
+    python scripts/capture_screenshots.py --base http://127.0.0.1:8823
 """
 
 from __future__ import annotations
 
-import socket
-import subprocess
-import time
+import argparse
 from pathlib import Path
 
 from playwright.sync_api import sync_playwright
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
-DOCS = REPO_ROOT / "docs"
+FAILING_QUESTION = "71017276"
 
-PAGES = [
-    ("/", "screenshot-home.png"),
-    ("/benchmark/", "screenshot-benchmark.png"),
-    ("/recall-lab/", "screenshot-recall-lab.png"),
-]
-
-
-def _free_port(start: int = 8090) -> int:
-    for p in range(start, start + 50):
-        with socket.socket() as s:
-            if s.connect_ex(("127.0.0.1", p)) != 0:
-                return p
-    raise RuntimeError("no free port")
+OPEN_EVIDENCE = """(qid) => {
+  const cards = [...document.querySelectorAll('div.rounded-lg.border')];
+  const card = cards.find((c) => c.textContent.includes(qid));
+  if (!card) throw new Error('no card for ' + qid);
+  const details = card.querySelector('details');
+  if (!details) throw new Error('no evidence panel for ' + qid);
+  details.open = true;
+}"""
 
 
-def _wait_until_up(url: str, timeout_s: float = 30.0) -> None:
-    import urllib.request
+def main() -> int:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--base", required=True)
+    ap.add_argument("--out", default="docs")
+    args = ap.parse_args()
 
-    deadline = time.time() + timeout_s
-    while time.time() < deadline:
-        try:
-            urllib.request.urlopen(url, timeout=2.0)
-            return
-        except Exception:
-            time.sleep(0.5)
-    raise RuntimeError(f"server did not come up at {url}")
+    base = args.base.rstrip("/")
+    out = Path(args.out)
+    out.mkdir(parents=True, exist_ok=True)
+    written: list[tuple[str, int]] = []
 
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch()
+        context = browser.new_context(viewport={"width": 1440, "height": 900})
+        page = context.new_page()
+        problems: list[str] = []
+        page.on("pageerror", lambda e: problems.append(str(e)))
 
-def main() -> None:
-    port = _free_port()
-    server = subprocess.Popen(
-        [
-            str(REPO_ROOT / ".venv/bin/uvicorn"),
-            "memory_arena.chatbot.api:app",
-            "--port",
-            str(port),
-            "--host",
-            "127.0.0.1",
-        ],
-        cwd=str(REPO_ROOT),
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
-    try:
-        base = f"http://127.0.0.1:{port}"
-        _wait_until_up(f"{base}/api/health")
-        with sync_playwright() as p:
-            browser = p.chromium.launch()
-            ctx = browser.new_context(
-                viewport={"width": 1440, "height": 900},
-                device_scale_factor=2,
-            )
-            for path, fname in PAGES:
-                page = ctx.new_page()
-                page.goto(f"{base}{path}", wait_until="networkidle")
-                # Give the data fetch + chart render a beat to settle.
-                page.wait_for_timeout(1500)
-                page.screenshot(path=str(DOCS / fname), full_page=True)
-                print(f"wrote {DOCS / fname}")
-                page.close()
-            browser.close()
-    finally:
-        server.terminate()
-        server.wait(timeout=5)
+        def shoot(route: str, name: str, full: bool = True) -> None:
+            page.goto(f"{base}{route}", wait_until="networkidle", timeout=45000)
+            page.wait_for_timeout(1400)
+            target = out / name
+            page.screenshot(path=str(target), full_page=full)
+            written.append((name, target.stat().st_size))
+
+        shoot("/", "screenshot-home.png")
+        shoot("/benchmark/", "screenshot-benchmark.png")
+        shoot("/recall-lab/", "screenshot-recall-lab.png")
+
+        # The Failure Lab shot needs the filter applied and one record open.
+        page.goto(f"{base}/recall-lab/", wait_until="networkidle", timeout=45000)
+        page.wait_for_timeout(1400)
+        page.select_option("select >> nth=1", "correct_session_wrong_answer")
+        page.wait_for_timeout(900)
+        page.evaluate(OPEN_EVIDENCE, FAILING_QUESTION)
+        page.wait_for_timeout(700)
+        target = out / "screenshot-failure-lab.png"
+        page.screenshot(path=str(target), full_page=True)
+        written.append((target.name, target.stat().st_size))
+
+        # The snapshot panel on its own, for the README's evidence section.
+        # Find the bordered box that holds the heading, not an ancestor that
+        # happens to wrap the whole page.
+        page.goto(f"{base}/benchmark/", wait_until="networkidle", timeout=45000)
+        page.wait_for_timeout(1200)
+        box = page.evaluate(
+            """() => {
+              const panel = [...document.querySelectorAll('section.rounded-lg')].find(
+                (s) => s.textContent.includes('Historical benchmark data')
+              );
+              if (!panel) throw new Error('no snapshot panel');
+              const r = panel.getBoundingClientRect();
+              return {x: r.x - 8, y: r.y - 8, width: r.width + 16, height: r.height + 16};
+            }"""
+        )
+        target = out / "screenshot-snapshot.png"
+        page.screenshot(path=str(target), clip=box)
+        written.append((target.name, target.stat().st_size))
+
+        context.close()
+        browser.close()
+
+    if problems:
+        raise SystemExit(f"page errors during capture: {problems}")
+    for name, size in written:
+        print(f"  {name}  {size // 1024} KB")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

@@ -79,6 +79,23 @@ class TestRunMemoryBenchmarkSmoke:
     """End-to-end (mocked LLM) smoke test of run_memory_benchmark."""
 
     @pytest.mark.asyncio
+    async def test_default_questions_use_preflight(self, monkeypatch):
+        observed: list[tuple[str, str]] = []
+
+        def capture_questions(corpus: str, subset: str):
+            observed.append((corpus, subset))
+            return []
+
+        monkeypatch.setattr("memory_arena.benchmark.runner.load_sessions", lambda corpus: [])
+        monkeypatch.setattr(
+            "memory_arena.benchmark.runner.load_memory_questions", capture_questions
+        )
+
+        await run_memory_benchmark()
+
+        assert observed == [("longmemeval-s", "preflight")]
+
+    @pytest.mark.asyncio
     async def test_runs_with_baselines(
         self, tmp_path, monkeypatch, sample_session, sample_question
     ):
@@ -131,7 +148,7 @@ class TestRunMemoryBenchmarkSmoke:
                     await run_memory_benchmark(
                         corpus="fake",
                         strategy="full_context,recency_window",
-                        questions="smoke",
+                        questions="preflight",
                         cost_cap=10.0,
                         top_k=3,
                     )

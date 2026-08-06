@@ -1,13 +1,11 @@
 cff-version: 1.2.0
-message: "If you use Memory Arena in research or a public writeup, please cite both this software and the underlying LongMemEval corpus."
-title: "Memory Arena: Apples-to-apples benchmark for agent-memory architectures"
+message: "If you use Agent Memory Testbench in research or a public writeup, please cite both this software and the underlying LongMemEval corpus."
+title: "Agent Memory Testbench: Apples-to-apples benchmark for agent-memory architectures"
 abstract: >-
-  Memory Arena benchmarks 21 agent-memory architectures (Mem0, Mem0+Graph,
-  Graphiti, Graphiti-on-FalkorDB, Cognee, LangMem, Memori, A-MEM, HippoRAG 2,
-  Karpathy LLM Wiki, the quantum rerankers QISS and SQR, plus pure-Python
-  baselines and advanced retrievers like HyDE, RAPTOR, Reflection, Persona
-  Profile, Hybrid RRF) on the same chat-session corpus, scored by the same
-  evaluator, under the same configs.
+  Agent Memory Testbench is an open testbench for tracing agent-memory behavior
+  from retrieval through answer evaluation. The package includes versioned
+  historical evidence for local inspection and reproduction; that evidence is
+  not a unified ranking of present-day systems.
 authors:
   - family-names: Puspus
     given-names: Xavier
@@ -27,14 +25,14 @@ keywords:
   - langmem
   - rag
   - vector-database
-version: 0.1.8
-date-released: 2026-06-28
+version: 0.1.9
+date-released: 2026-08-06
 preferred-citation:
   type: software
   authors:
     - family-names: Puspus
       given-names: Xavier
-  title: "Memory Arena: Apples-to-apples benchmark for agent-memory architectures"
+  title: "Agent Memory Testbench: Apples-to-apples benchmark for agent-memory architectures"
   year: 2026
   url: "https://github.com/xmpuspus/memory-arena"
 references:

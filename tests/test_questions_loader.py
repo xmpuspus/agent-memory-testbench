@@ -4,12 +4,14 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 import yaml
 
 from memory_arena.benchmark.questions import (
     discover_corpora,
     load_memory_questions,
 )
+from memory_arena.sessions.loaders import load_questions_jsonl
 
 
 def _write_yaml(path: Path, items):
@@ -47,10 +49,37 @@ def _build_dataset(tmp_path: Path, corpus: str = "longmemeval-s") -> Path:
 
 
 class TestLoadMemoryQuestions:
-    def test_smoke_yaml_loads(self, tmp_path, monkeypatch):
+    def test_preflight_preserves_fact_versions(self):
+        records = load_memory_questions("longmemeval-s", subset="preflight")
+        update = next(record for record in records if record.category == "knowledge_update")
+        assert len(update.ground_truth.fact_versions) >= 2
+        assert update.ground_truth.fact_versions[0].source_session_id
+
+    def test_historical_v018_uses_processed_question_ids(self, monkeypatch):
+        bundled_data = Path(__file__).parent.parent / "memory_arena" / "data"
+        monkeypatch.setenv("MEM_ARENA_DATASETS_PATH", str(bundled_data))
+        expected = load_questions_jsonl("longmemeval-s")
+        actual = load_memory_questions("longmemeval-s", subset="historical-v0.1.8")
+        assert [question.id for question in actual] == [question.id for question in expected]
+        assert len(actual) == 16
+
+    def test_smoke_alias_warns(self, tmp_path, monkeypatch):
         _build_dataset(tmp_path)
         monkeypatch.chdir(tmp_path)
-        records = load_memory_questions("longmemeval-s", subset="smoke")
+        with pytest.warns(DeprecationWarning, match="preflight"):
+            records = load_memory_questions("longmemeval-s", subset="smoke")
+        assert len(records) == 2
+
+    def test_longmemeval_full_requires_500_processed_questions(self, monkeypatch):
+        bundled_data = Path(__file__).parent.parent / "memory_arena" / "data"
+        monkeypatch.setenv("MEM_ARENA_DATASETS_PATH", str(bundled_data))
+        with pytest.raises(ValueError, match="500 processed questions"):
+            load_memory_questions("longmemeval-s", subset="full")
+
+    def test_preflight_yaml_loads(self, tmp_path, monkeypatch):
+        _build_dataset(tmp_path)
+        monkeypatch.chdir(tmp_path)
+        records = load_memory_questions("longmemeval-s", subset="preflight")
         assert len(records) == 2
         assert records[0].id == "q1"
         assert records[0].constraints.must_mention == ["engineer"]
@@ -58,14 +87,14 @@ class TestLoadMemoryQuestions:
     def test_abstention_constraint_propagates(self, tmp_path, monkeypatch):
         _build_dataset(tmp_path)
         monkeypatch.chdir(tmp_path)
-        records = load_memory_questions("longmemeval-s", subset="smoke")
+        records = load_memory_questions("longmemeval-s", subset="preflight")
         abst = next(r for r in records if r.id == "q2")
         assert abst.constraints.abstention_expected is True
         assert abst.category == "abstention"
 
     def test_missing_corpus_returns_empty(self, tmp_path, monkeypatch):
         monkeypatch.chdir(tmp_path)
-        result = load_memory_questions("does-not-exist", subset="smoke")
+        result = load_memory_questions("does-not-exist", subset="preflight")
         assert result == []
 
     def test_custom_yaml_file_path(self, tmp_path, monkeypatch):
@@ -104,6 +133,13 @@ class TestLoadMemoryQuestions:
         monkeypatch.chdir(tmp_path)
         records = load_memory_questions("any", subset=str(d))
         assert len(records) == 2
+
+    def test_unknown_named_subset_is_rejected(self, tmp_path, monkeypatch):
+        _build_dataset(tmp_path)
+        monkeypatch.chdir(tmp_path)
+
+        with pytest.raises(ValueError, match="Unknown question subset 'typo'"):
+            load_memory_questions("longmemeval-s", subset="typo")
 
     def test_full_falls_back_to_yaml_dir(self, tmp_path, monkeypatch):
         base = tmp_path / "datasets" / "c" / "questions"

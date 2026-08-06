@@ -7,17 +7,26 @@ to read benchmark results, list strategies, and stream the demo recall flow.
 from __future__ import annotations
 
 import json
+import os
 import re
+from collections import Counter
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Literal
 
 from fastapi import FastAPI, HTTPException
 from fastapi import Path as FPath
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from memory_arena import __version__ as _ma_version
+from memory_arena.evidence.bundled import load_bundled_manifest
+from memory_arena.evidence.failures import (
+    FAILURE_CLASSES,
+    JUDGE_FAIL_THRESHOLD,
+    join_question_evidence,
+)
 from memory_arena.settings import settings
 
 
@@ -27,7 +36,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="Memory Arena",
+    title="Agent Memory Testbench",
     description="Benchmark agent-memory architectures",
     version=_ma_version,
     lifespan=lifespan,
@@ -81,6 +90,51 @@ class HealthResponse(BaseModel):
     status: str
     strategies: list[str]
     has_results: bool
+    snapshot_id: str | None
+    snapshot_status: str
+
+
+class SnapshotResponse(BaseModel):
+    snapshot_id: str | None
+    status: Literal["historical", "unavailable"]
+    reason: str | None = None
+    protocol_id: str | None = None
+    corpus: str | None = None
+    question_set: str | None = None
+    question_count: int | None = None
+    category_count: int | None = None
+    included_strategies: list[str] = Field(default_factory=list)
+    missing_from_v0_1_8_claim: list[str] = Field(
+        default_factory=list, alias="missing_from_v0.1.8_claim"
+    )
+    source_commits: list[str] = Field(default_factory=list)
+    source_versions: dict[str, list[str]] = Field(default_factory=dict)
+    limitations: list[str] = Field(default_factory=list)
+
+
+class ResultRowResponse(BaseModel):
+    strategy: str | None
+    accuracy: float | None
+    mean_session_recall_at_k: float | None
+    mean_session_hit_at_k: float | None
+    avg_recall_latency_ms: float | None
+    total_cost_usd: float | None
+    abstention_f1: float | None
+    abstention_n: int | None
+    update_precision: float | None
+    update_n: int | None
+    temporal_correctness: float | None
+    temporal_n: int | None
+    accuracy_by_category: dict
+    questions_evaluated: int
+    errors: int
+    run_id: str | None
+
+
+class ResultsResponse(BaseModel):
+    corpus: str
+    results: list[ResultRowResponse]
+    snapshot: SnapshotResponse
 
 
 @app.get("/api/health", response_model=HealthResponse)
@@ -89,6 +143,7 @@ async def health() -> HealthResponse:
     from memory_arena.strategies import STRATEGY_REGISTRY
 
     results_dir = results_root()
+    snapshot = load_bundled_manifest(results_dir)
     has_results = (
         bool(list(results_dir.glob("longmemeval-s_*.json"))) if results_dir.exists() else False
     )
@@ -96,7 +151,14 @@ async def health() -> HealthResponse:
         status="ok",
         strategies=list(STRATEGY_REGISTRY.keys()),
         has_results=has_results,
+        snapshot_id=snapshot["snapshot_id"],
+        snapshot_status=snapshot["status"],
     )
+
+
+# Title-casing a directory name gives "Longmemeval S". Name the corpus the way
+# its authors publish it.
+CORPUS_LABELS = {"longmemeval-s": "LongMemEval-S", "longmemeval-m": "LongMemEval-M"}
 
 
 @app.get("/api/corpora")
@@ -109,6 +171,11 @@ async def list_corpora() -> dict:
         for d in sorted(base.iterdir()):
             if not d.is_dir() or d.name.startswith("."):
                 continue
+            # The bundled result snapshot sits beside the corpus in the same
+            # data directory. It holds result JSON, not sessions or questions,
+            # so listing it as a corpus shows the reader an internal directory.
+            if not (d / "processed").is_dir() and not (d / "questions").is_dir():
+                continue
             q_dir = d / "questions"
             count = 0
             if q_dir.is_dir():
@@ -117,7 +184,8 @@ async def list_corpora() -> dict:
                         count += q.read_text().count("- id:")
                     except OSError:
                         pass
-            out.append({"name": d.name, "label": d.name.replace("-", " ").title(), "count": count})
+            label = CORPUS_LABELS.get(d.name, d.name.replace("-", " ").title())
+            out.append({"name": d.name, "label": label, "count": count})
     if not out:
         out = [{"name": "longmemeval-s", "label": "LongMemEval-S", "count": 30}]
     return {"corpora": out}
@@ -130,10 +198,10 @@ async def list_strategies() -> dict:
     return {"strategies": [{"name": n, "available": True} for n in STRATEGY_REGISTRY]}
 
 
-@app.get("/api/results/{corpus}")
+@app.get("/api/results/{corpus}", response_model=ResultsResponse)
 async def get_results(
     corpus: str = FPath(..., pattern=r"^[a-z0-9_\-]+$"),
-) -> dict:
+) -> ResultsResponse:
     corpus = _safe_slug(corpus, "corpus")
     from memory_arena.paths import results_root
 
@@ -160,6 +228,7 @@ async def get_results(
         files = sorted(per_strategy.values())
     if not files:
         raise HTTPException(status_code=404, detail=f"No results for corpus: {corpus}")
+    snapshot = load_bundled_manifest(results_dir)
     rows: list[dict] = []
     for p in files:
         try:
@@ -198,14 +267,59 @@ async def get_results(
                 "run_id": data.get("run_id"),
             }
         )
-    return {"corpus": corpus, "results": rows}
+    return ResultsResponse(corpus=corpus, results=rows, snapshot=snapshot)
 
 
-@app.get("/api/benchmark/{corpus}")
+@app.get("/api/benchmark/{corpus}", response_model=ResultsResponse)
 async def get_benchmark(
     corpus: str = FPath(..., pattern=r"^[a-z0-9_\-]+$"),
-) -> dict:
+) -> ResultsResponse:
     return await get_results(corpus)
+
+
+def _load_question_map(corpus: str) -> dict[str, dict]:
+    from memory_arena.sessions.loaders import load_questions_jsonl
+
+    try:
+        records = load_questions_jsonl(corpus)
+    except (OSError, ValueError, json.JSONDecodeError):
+        return {}
+    out: dict[str, dict] = {}
+    for record in records:
+        truth = record.ground_truth
+        out[record.id] = {
+            "question": record.question,
+            "answer": getattr(truth, "answer", None),
+            "supporting_session_ids": list(getattr(truth, "supporting_session_ids", None) or []),
+        }
+    return out
+
+
+def _question_evidence(corpus: str) -> dict[str, dict]:
+    """Question text, expected answer, and gold sessions, keyed by question id.
+
+    A checkout keeps the processed corpus out of git, so a fresh clone has the
+    corpus directory but not the question file. The package bundles the same 16
+    questions, so fall back to those rather than show the Failure Lab with no
+    question text. A corpus neither path carries gives an empty map, and the
+    join then writes explicit nulls rather than a guess.
+    """
+    local = _load_question_map(corpus)
+    if local:
+        return local
+
+    bundled = Path(__file__).resolve().parents[1] / "data"
+    if not (bundled / corpus / "processed" / "questions.jsonl").exists():
+        return {}
+    previous = os.environ.get("MEM_ARENA_DATASETS_PATH")
+    os.environ["MEM_ARENA_DATASETS_PATH"] = str(bundled)
+    try:
+        return _load_question_map(corpus)
+    finally:
+        if previous is None:
+            os.environ.pop("MEM_ARENA_DATASETS_PATH", None)
+        else:
+            os.environ["MEM_ARENA_DATASETS_PATH"] = previous
 
 
 @app.get("/api/recall-records/{corpus}/{strategy}")
@@ -250,6 +364,9 @@ async def get_recall_records(
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
+    records = join_question_evidence(data.get("recall_records", []), _question_evidence(corpus))
+    counts = Counter(record["failure_class"] for record in records)
+
     # Decorate each record with a per-record measurability flag and a
     # strategy-level measurability flag so the dashboard can show
     # "Recall not measurable for this strategy" instead of pretending HIT/MISS.
@@ -258,7 +375,9 @@ async def get_recall_records(
         "strategy": strategy,
         "recall_at_k_measurable": data.get("recall_at_k_measurable"),
         "top_k": data.get("top_k"),
-        "records": data.get("recall_records", []),
+        "judge_fail_threshold": JUDGE_FAIL_THRESHOLD,
+        "failure_counts": {n: counts[n] for n in FAILURE_CLASSES if counts.get(n)},
+        "records": records,
     }
 
 

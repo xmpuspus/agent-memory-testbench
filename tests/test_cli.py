@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 from typer.testing import CliRunner
 
 from memory_arena.cli import app
@@ -15,6 +17,12 @@ class TestCLIHelp:
         assert result.exit_code == 0
         assert "memory-arena" in result.output
 
+    def test_root_help_uses_public_display_name(self):
+        result = runner.invoke(app, ["--help"])
+
+        assert result.exit_code == 0
+        assert "Agent Memory Testbench (formerly Memory Arena)" in result.output
+
     def test_init_corpus_help(self):
         result = runner.invoke(app, ["init-corpus", "--help"])
         assert result.exit_code == 0
@@ -23,6 +31,7 @@ class TestCLIHelp:
     def test_benchmark_help(self):
         result = runner.invoke(app, ["benchmark", "--help"])
         assert result.exit_code == 0
+        assert "preflight" in result.output
 
     def test_recall_lab_help(self):
         result = runner.invoke(app, ["recall-lab", "--help"])
@@ -31,6 +40,60 @@ class TestCLIHelp:
     def test_health_help(self):
         result = runner.invoke(app, ["health", "--help"])
         assert result.exit_code == 0
+
+
+class TestRegisteredCommands:
+    """A helper placed between a decorator and its function steals the command.
+
+    That happened to `demo`, and the whole suite stayed green while the one
+    command the README tells a reader to run was gone.
+    """
+
+    EXPECTED = {
+        "arena",
+        "benchmark",
+        "build-memory",
+        "demo",
+        "download-longmemeval",
+        "health",
+        "ingest-sessions",
+        "init-corpus",
+        "recall-lab",
+        "report",
+        "serve",
+    }
+
+    def test_every_documented_command_is_registered(self):
+        registered = {
+            (c.name or c.callback.__name__).replace("_", "-") for c in app.registered_commands
+        }
+
+        assert self.EXPECTED <= registered
+
+    def test_no_private_helper_is_registered_as_a_command(self):
+        registered = {
+            (c.name or c.callback.__name__).replace("_", "-") for c in app.registered_commands
+        }
+
+        assert [n for n in registered if n.startswith("_")] == []
+
+    def test_demo_runs_and_reports_its_own_help(self):
+        result = CliRunner().invoke(app, ["demo", "--help"])
+
+        assert result.exit_code == 0
+        assert "--port" in result.stdout
+
+
+class TestDemoBanner:
+    def test_the_banner_names_the_snapshot_and_the_keyless_promise(self):
+        """The demo start line is the recording's first and last beat."""
+        from memory_arena.cli import _demo_banner_lines
+
+        joined = " ".join(_demo_banner_lines(8000))
+
+        assert "http://127.0.0.1:8000/" in joined
+        assert "v0.1.8-bundled-historical" in joined
+        assert "Inspect the evidence locally. No API key. No Docker." in joined
 
 
 class TestInitCorpus:
@@ -55,7 +118,7 @@ class TestHealth:
     def test_health_runs(self):
         result = runner.invoke(app, ["health"])
         assert result.exit_code == 0
-        assert "Memory Arena" in result.output
+        assert "Agent Memory Testbench" in result.output
 
     def test_health_json_format(self):
         result = runner.invoke(app, ["health", "--format", "json"])
@@ -99,6 +162,26 @@ class TestReportErrors:
         monkeypatch.setenv("MEM_ARENA_RESULTS_PATH", str(tmp_path / "nope"))
         result = runner.invoke(app, ["report", "--corpus", "longmemeval-s"])
         assert result.exit_code == 1
+
+    def test_report_uses_public_display_name(self, tmp_path, monkeypatch):
+        result_dir = tmp_path / "results"
+        result_dir.mkdir()
+        (result_dir / "test-corpus_bm25_summary.json").write_text(
+            json.dumps(
+                {
+                    "strategy": "bm25",
+                    "accuracy": 0.25,
+                    "abstention_f1": None,
+                    "total_cost_usd": 0.01,
+                }
+            )
+        )
+        monkeypatch.setenv("MEM_ARENA_RESULTS_PATH", str(result_dir))
+
+        result = runner.invoke(app, ["report", "--corpus", "test-corpus"])
+
+        assert result.exit_code == 0
+        assert "Agent Memory Testbench Report" in result.output
 
 
 class TestCorpusSlugValidation:

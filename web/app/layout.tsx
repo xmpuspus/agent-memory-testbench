@@ -4,9 +4,9 @@ import Nav from "@/components/Nav";
 import ClientErrorBoundary from "@/components/ClientErrorBoundary";
 
 export const metadata: Metadata = {
-  title: "Memory Arena: Agent Memory Benchmark",
+  title: "Agent Memory Testbench",
   description:
-    "Benchmark 16 agent-memory architectures (Mem0, Graphiti, Cognee, LangMem, Memori, Karpathy LLM Wiki, plus baselines and advanced retrievers) on the same evaluator under the same configs.",
+    "Compare memory architectures, trace where answers fail, and rerun versioned evidence from one open testbench.",
 };
 
 export default function RootLayout({
@@ -30,7 +30,7 @@ export default function RootLayout({
             GitHub
           </a>
           <span className="mx-2">·</span>
-          <span>Memory Arena: Agent Memory Benchmark</span>
+          <span>Agent Memory Testbench</span>
         </footer>
       </body>
     </html>

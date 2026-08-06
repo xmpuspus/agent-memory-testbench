@@ -8,9 +8,11 @@ import {
   CATEGORY_INFO,
   CORPORA,
   fetchBenchmarkResults,
+  type BenchmarkDataState,
   type BenchmarkRow,
   type Strategy,
 } from "@/lib/api";
+import BenchmarkDataStatus from "@/components/BenchmarkDataStatus";
 import InfoTip from "@/components/InfoTip";
 
 function pct(value: number | null | undefined): string {
@@ -34,15 +36,32 @@ function f1(value: number | null | undefined): string {
 
 type SortKey = "accuracy" | "recall" | "latency" | "cost" | "name";
 
+function compareSortValues(
+  a: number | string | null,
+  b: number | string | null,
+  descending: boolean
+): number {
+  if (a === null) return b === null ? 0 : 1;
+  if (b === null) return -1;
+  if (a < b) return descending ? 1 : -1;
+  if (a > b) return descending ? -1 : 1;
+  return 0;
+}
+
 export default function BenchmarkPage() {
   const [corpus, setCorpus] = useState(CORPORA[0]?.name ?? "longmemeval-s");
-  const [rows, setRows] = useState<BenchmarkRow[]>([]);
+  const [dataState, setDataState] = useState<BenchmarkDataState | null>(null);
   const [sortKey, setSortKey] = useState<SortKey>("accuracy");
   const [sortDesc, setSortDesc] = useState<boolean>(true);
 
   useEffect(() => {
-    fetchBenchmarkResults(corpus).then(setRows);
+    fetchBenchmarkResults(corpus).then(setDataState);
   }, [corpus]);
+
+  const rows = useMemo<BenchmarkRow[]>(
+    () => (dataState && dataState.state !== "unavailable" ? dataState.rows : []),
+    [dataState]
+  );
 
   const sorted = useMemo(() => {
     const copy = [...rows];
@@ -50,34 +69,32 @@ export default function BenchmarkPage() {
       const av = (() => {
         switch (sortKey) {
           case "accuracy":
-            return a.accuracy ?? 0;
+            return a.accuracy;
           case "recall":
-            return a.mean_session_recall_at_k ?? 0;
+            return a.mean_session_recall_at_k;
           case "latency":
-            return a.avg_recall_latency_ms ?? 0;
+            return a.avg_recall_latency_ms;
           case "cost":
-            return a.total_cost_usd ?? 0;
+            return a.total_cost_usd;
           case "name":
-            return a.strategy ?? "";
+            return a.strategy;
         }
       })();
       const bv = (() => {
         switch (sortKey) {
           case "accuracy":
-            return b.accuracy ?? 0;
+            return b.accuracy;
           case "recall":
-            return b.mean_session_recall_at_k ?? 0;
+            return b.mean_session_recall_at_k;
           case "latency":
-            return b.avg_recall_latency_ms ?? 0;
+            return b.avg_recall_latency_ms;
           case "cost":
-            return b.total_cost_usd ?? 0;
+            return b.total_cost_usd;
           case "name":
-            return b.strategy ?? "";
+            return b.strategy;
         }
       })();
-      if (av < bv) return sortDesc ? 1 : -1;
-      if (av > bv) return sortDesc ? -1 : 1;
-      return 0;
+      return compareSortValues(av, bv, sortDesc);
     });
     return copy;
   }, [rows, sortKey, sortDesc]);
@@ -141,6 +158,15 @@ export default function BenchmarkPage() {
         </div>
       </section>
 
+      {dataState?.state === "historical" && (
+        <BenchmarkDataStatus state="historical" snapshot={dataState.snapshot} />
+      )}
+
+      {dataState?.state === "unavailable" ? (
+        <BenchmarkDataStatus state="unavailable" message={dataState.message} />
+      ) : (
+        <>
+
       <section className="space-y-4">
         <h2
           className="text-xl font-semibold"
@@ -149,7 +175,7 @@ export default function BenchmarkPage() {
           Headline metrics
         </h2>
         <div
-          className="rounded-lg border overflow-hidden"
+          className="rounded-lg border overflow-x-auto"
           style={{ borderColor: "var(--border)", background: "var(--card)" }}
         >
           <table className="w-full text-sm">
@@ -256,7 +282,7 @@ export default function BenchmarkPage() {
           defined.
         </p>
         <div
-          className="rounded-lg border overflow-hidden"
+          className="rounded-lg border overflow-x-auto"
           style={{ borderColor: "var(--border)", background: "var(--card)" }}
         >
           <table className="w-full text-sm">
@@ -344,6 +370,9 @@ export default function BenchmarkPage() {
           ))}
         </div>
       </section>
+
+        </>
+      )}
     </div>
   );
 }
