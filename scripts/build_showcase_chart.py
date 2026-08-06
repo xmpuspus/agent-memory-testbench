@@ -235,7 +235,7 @@ def main() -> None:
         "run on the same model (Claude Sonnet) as the baselines. Opus is a "
         "strict judge: GPT-4o grades these\n"
         "~15pp higher with +0.97 rank agreement. Every result JSON is "
-        "stamped. github.com/xmpuspus/memory-arena",
+        "stamped. github.com/xmpuspus/agent-memory-testbench",
         transform=ax.transAxes,
         fontsize=7.6,
         color="#777",

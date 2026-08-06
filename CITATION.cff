@@ -11,8 +11,8 @@ authors:
     given-names: Xavier
     email: xpuspus@gmail.com
 license: MIT
-repository-code: "https://github.com/xmpuspus/memory-arena"
-url: "https://github.com/xmpuspus/memory-arena"
+repository-code: "https://github.com/xmpuspus/agent-memory-testbench"
+url: "https://github.com/xmpuspus/agent-memory-testbench"
 type: software
 keywords:
   - agent-memory
@@ -34,7 +34,7 @@ preferred-citation:
       given-names: Xavier
   title: "Agent Memory Testbench: Apples-to-apples benchmark for agent-memory architectures"
   year: 2026
-  url: "https://github.com/xmpuspus/memory-arena"
+  url: "https://github.com/xmpuspus/agent-memory-testbench"
 references:
   - type: conference-paper
     title: "LongMemEval: Benchmarking Chat Assistants on Long-Term Interactive Memory"

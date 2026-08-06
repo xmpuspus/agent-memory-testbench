@@ -21,7 +21,7 @@ export default function RootLayout({
         </main>
         <footer className="border-t mt-16 py-8 text-center text-sm" style={{ borderColor: "var(--border)", color: "var(--muted)" }}>
           <a
-            href="https://github.com/xmpuspus/memory-arena"
+            href="https://github.com/xmpuspus/agent-memory-testbench"
             target="_blank"
             rel="noopener noreferrer"
             className="hover:opacity-70 transition-opacity"

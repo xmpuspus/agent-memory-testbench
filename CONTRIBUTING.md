@@ -5,7 +5,7 @@ Thanks for your interest. This guide covers setup, conventions, and how to add n
 ## Development Setup
 
 ```bash
-git clone https://github.com/xmpuspus/memory-arena
+git clone https://github.com/xmpuspus/agent-memory-testbench
 cd memory-arena
 python3 -m venv .venv
 source .venv/bin/activate

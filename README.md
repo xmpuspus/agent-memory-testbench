@@ -224,7 +224,7 @@ the retrieval substrate is the same and only the reranking math differs.
 ## Quick start (local)
 
 ```bash
-git clone https://github.com/xmpuspus/memory-arena
+git clone https://github.com/xmpuspus/agent-memory-testbench
 cd memory-arena
 pip install -e '.[dev]'
 
@@ -506,7 +506,7 @@ be cited separately:
   title  = {Agent Memory Testbench: Apples-to-apples benchmark for agent-memory architectures},
   author = {Puspus, Xavier},
   year   = {2026},
-  url    = {https://github.com/xmpuspus/memory-arena}
+  url    = {https://github.com/xmpuspus/agent-memory-testbench}
 }
 
 @inproceedings{wu2024longmemeval,

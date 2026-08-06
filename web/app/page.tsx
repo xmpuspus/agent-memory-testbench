@@ -100,7 +100,7 @@ export default function Home() {
             Historical results
           </Link>
           <a
-            href="https://github.com/xmpuspus/memory-arena"
+            href="https://github.com/xmpuspus/agent-memory-testbench"
             target="_blank"
             rel="noopener noreferrer"
             className="px-4 py-2 rounded-lg text-sm font-medium border transition-opacity hover:opacity-80"

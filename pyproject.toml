@@ -98,10 +98,10 @@ all-systems = [
 memory-arena = "memory_arena.cli:app"
 
 [project.urls]
-Homepage = "https://github.com/xmpuspus/memory-arena"
-Documentation = "https://github.com/xmpuspus/memory-arena/tree/main/docs"
-Repository = "https://github.com/xmpuspus/memory-arena"
-Issues = "https://github.com/xmpuspus/memory-arena/issues"
+Homepage = "https://github.com/xmpuspus/agent-memory-testbench"
+Documentation = "https://github.com/xmpuspus/agent-memory-testbench/tree/main/docs"
+Repository = "https://github.com/xmpuspus/agent-memory-testbench"
+Issues = "https://github.com/xmpuspus/agent-memory-testbench/issues"
 
 [tool.hatch.version]
 path = "memory_arena/__init__.py"

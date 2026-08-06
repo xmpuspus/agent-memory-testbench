@@ -218,7 +218,7 @@ def main() -> None:
         "Cognee and Memori synthesize memory\nand return no ranked sessions, so they have no "
         "recall@5 marker. full_context stuffs the whole conversation (it does not\nretrieve "
         "top-k), which is why its recall is low and its cost is highest. "
-        "github.com/xmpuspus/memory-arena",
+        "github.com/xmpuspus/agent-memory-testbench",
         transform=ax.transAxes,
         fontsize=7.4,
         color="#777",
