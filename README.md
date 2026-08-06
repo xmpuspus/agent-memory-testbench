@@ -358,7 +358,7 @@ the retrieval substrate is identical and only the reranking math differs.
 | `langmem`          | LangGraph InMemoryStore       | `create_memory_store_manager(anthropic:claude-sonnet-4-6)`, leveled; text-embedding-3-large. |
 | `memori`           | Postgres                      | SQL-native, augmentation pipeline. Cloud-quota throttled without `MEMORI_API_KEY`. |
 
-### Quick start (local)
+## Quick start (local)
 
 ```bash
 git clone https://github.com/xmpuspus/memory-arena
@@ -409,17 +409,17 @@ Every result JSON is stamped with the commit SHA, installed package
 versions, model IDs, host info, and seed under `metadata`. If your
 numbers differ from the published table, post the diff and we'll bisect.
 
-### Why this exists
+## Why this exists
 
 A simple chart someone can send when asked "which memory SDK should I
 pick?" Vendor benchmarks are vendor-tuned, academic benchmarks are
-corpus-tuned, and the rankings flip every quarter. Memory Arena is the
+corpus-tuned, and the rankings flip every quarter. Agent Memory Testbench is the
 apples-to-apples version: same lifecycle, same eval, same configs, every
 strategy run end-to-end with real LLM calls.
 
-### Bring your own corpus
+## Bring your own corpus
 
-Memory Arena reads any chat-session corpus that fits the schema:
+Agent Memory Testbench reads any chat-session corpus that fits the schema:
 
 ```python
 class Session(BaseModel):
@@ -440,7 +440,7 @@ Drop normalized JSONL into
 `datasets/<your-corpus>/processed/sessions.jsonl` and YAML question
 files into `datasets/<your-corpus>/questions/smoke/`.
 
-### Project structure
+## Project structure
 
 - `memory_arena/strategies/`, 20 strategies, all subclass `MemoryStrategy`
 - `memory_arena/sessions/`, corpus loaders (LongMemEval today)
@@ -464,7 +464,7 @@ files into `datasets/<your-corpus>/questions/smoke/`.
 - `web/`, Next.js 14 dashboard source (`cd web && npx next build && cp -R out/* ../memory_arena/static/`)
 - `tests/`: 362 tests, mock-based, no live API calls
 
-### Conventions
+## Conventions
 
 - **Functions:** snake_case
 - **Classes:** PascalCase
@@ -473,7 +473,7 @@ files into `datasets/<your-corpus>/questions/smoke/`.
 - **CLI:** Typer + Rich
 - **Async:** every strategy method is async; the runner is a single `asyncio.gather` across strategies
 
-### Compose profiles
+## Compose profiles
 
 ```bash
 docker compose up -d neo4j postgres        # baseline (graphiti, memori backends)
@@ -483,7 +483,7 @@ docker compose --profile full up -d        # also brings up the api+web containe
 `MEM_ARENA_NEO4J_PASSWORD` is required, compose refuses to start
 without it. Generate one with `openssl rand -hex 16`.
 
-### Limitations
+## Limitations
 
 - **Memori cloud quota.** Memori 3.x routes its augmentation runtime through a cloud quota service that 429s anonymous IPs after a few requests. Set `MEMORI_API_KEY` for full throughput.
 - **Full-context cost cap.** `full_context` always hits the cost cap on the smoke subset; bump `--cost-cap` to 25+ to evaluate all 16 questions.
@@ -491,7 +491,7 @@ without it. Generate one with `openssl rand -hex 16`.
 - **Single generator.** Sonnet 4.6 runs the recall-step generation for every strategy that does not pin its own (vendor SDKs use their own internals). A robustness sweep across generators is implemented in [`scripts/robustness.py`](scripts/robustness.py); results to be added in v0.2.
 - **Single judge.** Opus 4.7 grades every answer; a 19-way cross-judge with GPT-4o yields Spearman ρ = +0.967 on the ranks (same order, GPT-4o more lenient in absolute terms). See [`results/cross_judge_report.json`](results/cross_judge_report.json).
 
-### Verify our numbers in 5 minutes
+## Verify our numbers in 5 minutes
 
 Don't trust the bundled snapshot, verify it. With `OPENAI_API_KEY` and
 `ANTHROPIC_API_KEY` exported and the corpus already ingested, run:
@@ -511,7 +511,7 @@ Expected (~5 min wall, ~$0.50 spend, single seed):
 If your numbers fall outside that envelope, please open an issue with
 the result JSON attached, we'll bisect.
 
-### Vendors: PR your tuned config
+## Vendors: PR your tuned config
 
 The table reports each vendor at its **documented default**. If your
 SDK ships with a recommended config that beats the default, open a PR
@@ -526,17 +526,17 @@ We re-run the bench against the new config and merge if the gain is
 real and reproducible. The PR template walks through every required
 field: see [`.github/PULL_REQUEST_TEMPLATE.md`](.github/PULL_REQUEST_TEMPLATE.md).
 
-### FAQ
+## FAQ
 
 Common objections (small N, single judge, vendor defaults vs tuned,
 why memori is at 1%, etc.) are answered in [`docs/FAQ.md`](docs/FAQ.md).
 Read that before opening an issue, most of what you'd ask is already
 addressed there.
 
-### About the author
+## About the author
 
 I'm [Xavier Puspus](https://github.com/xmpuspus), an AI engineering lead.
-I built Memory Arena because I needed to choose a memory store for an
+I built Agent Memory Testbench because I needed to choose a memory store for an
 agent at work and could not find a single comparison that ran the same
 eval against the same corpus across all the vendor SDKs. Vendor blog
 posts compared themselves to ChatGPT memory; academic papers compared
@@ -547,7 +547,7 @@ full LongMemEval corpus, cross-judges, and tuned vendor configs in v0.2 -
 the methodology is open, the result JSONs are stamped, and PRs from
 vendors are explicitly invited.
 
-### Strategies and benchmarks not yet covered
+## Strategies and benchmarks not yet covered
 
 The arena is intentionally narrow at v0.1.8. These are the directions queued for v0.2 and beyond, with paper / repo links so readers can follow the source:
 
@@ -555,7 +555,7 @@ The arena is intentionally narrow at v0.1.8. These are the directions queued for
 - **Mem0+Graph (`mem0g`)** is excluded from the leaderboard: mem0 v2.0.0 removed the OSS graph store, so it can only run on the deprecated v1 + gpt-4o-mini. Graph memory is covered by `graphiti`; the strategy stays in the repo for anyone pinning mem0 v1.
 - **MemoryAgentBench** (ICLR 2026), [arxiv 2507.05257](https://arxiv.org/abs/2507.05257). Defines a 4-competency taxonomy (accurate retrieval, test-time learning, long-range understanding, conflict resolution) the field is converging on. v0.2 will map memory-arena's 7 axes onto it.
 
-### Roadmap
+## Roadmap
 
 Tracked in detail in [`STATUS.md`](STATUS.md#next-steps-v02). Headline items for v0.2:
 
@@ -569,9 +569,9 @@ Tracked in detail in [`STATUS.md`](STATUS.md#next-steps-v02). Headline items for
 8. Benjamini-Hochberg q-values for the pairwise matrix (paired-bootstrap groundwork landed; q-value column queued for v0.2).
 9. Multi-generator robustness sweep (`scripts/robustness.py`) results published.
 
-### References
+## References
 
-The strategies and methodology in Memory Arena build directly on prior
+The strategies and methodology in Agent Memory Testbench build directly on prior
 work. The full machine-readable list is in
 [`CITATION.cff`](CITATION.cff); the most load-bearing references are:
 
@@ -620,15 +620,15 @@ work. The full machine-readable list is in
   Introduction to the Bootstrap*. Chapman and Hall / CRC, 1993. The
   resampling procedure under the accuracy + paired-bootstrap CIs.
 
-### Cite
+## Cite
 
-If you use Memory Arena in research or a blog post, cite via
+If you use Agent Memory Testbench in research or a blog post, cite via
 [`CITATION.cff`](CITATION.cff). LongMemEval (the underlying corpus) should
 be cited separately:
 
 ```bibtex
 @software{puspus2026memoryarena,
-  title  = {Memory Arena: Apples-to-apples benchmark for agent-memory architectures},
+  title  = {Agent Memory Testbench: Apples-to-apples benchmark for agent-memory architectures},
   author = {Puspus, Xavier},
   year   = {2026},
   url    = {https://github.com/xmpuspus/memory-arena}
@@ -644,7 +644,7 @@ be cited separately:
 }
 ```
 
-### License
+## License
 
 MIT. Vendor SDKs are pinned per their own licenses. The bundled
 LongMemEval-S smoke subset is derived from
