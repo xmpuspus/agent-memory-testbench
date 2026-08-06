@@ -341,7 +341,7 @@ export interface RecallRecord {
   session_hit?: boolean | null;
   turn_hit?: boolean | null;
   score?: RecordScore | null;
-  // The strategy's retrieved supporting session ids — not the gold-truth
+  // The strategy's retrieved supporting session ids, not the gold-truth
   // expected ones. Expected supporting ids live in the question file and
   // aren't echoed back in recall_records.
   supporting_session_ids: string[];

@@ -299,7 +299,7 @@ export default function RecallLabPage() {
           >
             {failureFilter === "all"
               ? "HIT / MISS by question"
-              : `${FAILURE_LABELS[failureFilter]}: ${visibleRecords.length} of ${counts.total} questions`}
+              : `${FAILURE_LABELS[failureFilter]}, ${visibleRecords.length} of ${counts.total} questions`}
           </h2>
           <div className="space-y-3">
             {visibleRecords.map((rec) => {
