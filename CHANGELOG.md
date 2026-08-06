@@ -4,19 +4,132 @@ All notable changes to Memory Arena.
 
 ## [Unreleased]
 
-## [0.1.9] - 2026-08-05
+## [0.1.9] - 2026-08-06 - Trust reset: the old numbers are historical, and broken data no longer scores
+
+### Why this release matters
+
+The published v0.1.8 table read as a current ranking of agent-memory systems.
+It was not one. Its rows came from mixed source commits and mixed seed counts.
+Five strategies on the public leaderboard were never in the bundled data.
+
+Three code paths also turned missing or malformed evidence into a real looking
+number. A broken record scored instead of reporting that it failed. This
+release fixes those paths, labels the bundled evidence as historical, and adds
+the view that shows why an answer was wrong. It publishes no new ranking.
 
 ### Fixed
-- Corrected question loading and raw cross-judge comparison.
 
-### Evidence
-- Bundled snapshot: `v0.1.8-bundled-historical`.
+- An unparseable secondary-judge response scored zero. It is now ungraded.
+- A stored grade of `NaN` scored 100. It is now ungraded.
+- An undefined rank correlation printed as `0.0`. It now prints `null`.
+- `/api/corpora` listed the result snapshot as a dataset.
+- Mobile benchmark tables clipped their last three columns.
+- The `demo` command lost its registration and no test caught it.
+
+The cross-judge script now takes only a bare integer from 0 through 100. Text
+such as `I would say 85 out of 100` no longer scrapes to 100. An ungraded
+record keeps its question id, strategy, and seed, and names its reason. The
+reason separates an absent grade from a broken one.
+
+A corpus directory now has to hold questions or processed sessions, so the home
+page stops advertising `Results_Snapshot`. The page labels the corpus
+`LongMemEval-S`. The benchmark tables scroll sideways on a phone, so a reader
+reaches Latency, Cost, and Questions. A test asserts that every documented
+command stays registered and that no private helper becomes one.
+
+### Added
+
+- The Recall Lab shows why an answer failed.
+- A filter selects `Correct session, wrong answer`.
+- A GitHub Pages workflow publishes the bundled site.
+- `memory-arena demo` prints the snapshot it serves.
+
+Each Recall Lab record opens to show the question, the expected answer, the
+gold session, session and turn retrieval, the answer given, the primary judge
+score and rationale, and the structural checks. For `naive_vector` the filter
+selects 7 of 16 questions. The failing cut is 50, and the API reports it as
+`judge_fail_threshold`.
+
+`scripts/build_pages_api.py` freezes the read-only API to static files, so the
+public site serves the bytes the wheel serves.
+
+### Changed
+
+- Six of seven high-severity frontend advisories now clear.
+- The recording and screenshot scripts run against the installed wheel.
+- The social card reads the bundled snapshot, not the working directory.
+
+`npm audit fix`, a `postcss` bump, and a `glob` override scoped to
+`@next/eslint-plugin-next` clear the six. The seventh is Next.js itself.
+`STATUS.md` gives the per-advisory reasoning. Reading the working `results/`
+directory put five strategies under a heading that says 16.
+
+### Install and upgrade
+
+```bash
+pip install --upgrade memory-arena==0.1.9
+memory-arena demo
+```
 
 ### Compatibility
-- The package, CLI command, and Python import remain `memory-arena` and `memory_arena`.
+
+- The PyPI project, CLI command, and import stay `memory-arena` and `memory_arena`.
+- Result filenames and the `MEM_ARENA_` prefix do not change.
+- The repository moved to `xmpuspus/agent-memory-testbench`.
+
+GitHub redirects the old repository path. Run `git remote set-url` to point an
+existing clone at the new one.
+
+### Historical snapshot status
+
+The bundled evidence is `v0.1.8-bundled-historical`, protocol `legacy-v0.1`,
+corpus `longmemeval-s`, 16 strategies, 16 questions, 4 categories. Its status
+is `historical`. It states three limitations: mixed source commits, mixed seed
+counts, and that it is not the current benchmark.
+
+Five strategies from the old public claim are absent from it: `amem`,
+`graphiti_falkor`, `hipporag2`, `qiss`, and `sqr`.
+
+### The legacy cross-judge result is invalid
+
+`results/cross_judge_report.json` carries `status: invalid` and
+`valid_for_claims: false`. The old report compared primary adjusted accuracy
+percentages against secondary raw judge scores from 0 to 100. Those are
+different units.
+
+Its old ranks, means, and correlation stay only inside
+`invalid_legacy_evidence.legacy_values`. No number from it supports a claim in
+this release. This release buys no new grades to replace it.
+
+### Raw evidence
+
+- Snapshot and manifest: `memory_arena/data/results_snapshot/`
+- Per-seed records: `longmemeval-s_<strategy>_seed<N>.json` in that directory
+- Quarantined cross-judge artifact: `results/cross_judge_report.json`
+- Failure classification and threshold: `memory_arena/evidence/failures.py`
 
 ### Known limitations
-- This release does not publish a new benchmark ranking.
+
+- This release publishes no new ranking and no current winner.
+- The bundled snapshot is past evidence, so read no causal advantage from it.
+- Secondary-judge evidence is absent, not merely old.
+- One high-severity Next.js advisory stays open.
+
+The Failure Lab labels the score it shows as the primary judge score. The open
+Next.js advisory needs a server that this static export does not run.
+
+### Reproduce it from the published wheel
+
+```bash
+python3 -m venv /tmp/verify
+/tmp/verify/bin/pip install --no-cache-dir memory-arena==0.1.9
+/tmp/verify/bin/memory-arena --version
+/tmp/verify/bin/memory-arena demo
+```
+
+The demo needs no API key and no container. `/api/health` reports the snapshot
+id and status. `/api/benchmark/longmemeval-s` returns the 16 manifest rows in
+manifest order.
 
 ## [0.1.8] - 2026-06-28 - Level the field: vendor SDKs on the same model, mem0g dropped, full cross-judge
 

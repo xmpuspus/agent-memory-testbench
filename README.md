@@ -8,12 +8,21 @@ Compare memory architectures, trace where answers fail, and rerun versioned evid
 
 Planned Pages address: `https://xmpuspus.github.io/agent-memory-testbench/`
 
-No provider keys are needed to inspect the bundled historical evidence:
+Inspect the bundled historical evidence with no provider key:
 
 ```bash
 pip install memory-arena
 memory-arena demo
 ```
+
+<p align="center">
+  <img src="docs/demo.gif" alt="The demo starts. The dashboard shows the overview, the historical results, and one wrong answer" width="960">
+</p>
+
+<p align="center"><sub><i>Recorded from the installed v0.1.9 wheel. No provider
+key and no container. 960 by 540, 10 frames per second, 17.8 seconds.
+Re-record it with <code>./docs/record_demo.sh</code>. Static poster:
+<a href="docs/demo-poster.png">docs/demo-poster.png</a>.</i></sub></p>
 
 > **Bundled evidence:** `v0.1.8-bundled-historical` has historical status. Its
 > manifest lists 16 strategies, 16 questions, and 4 categories assembled from
@@ -29,7 +38,7 @@ Use [`docs/decision-guide.md`](docs/decision-guide.md) to plan a new comparison.
 
 ### Limits of the historical snapshot
 
-- **Not "vendor SDK X is bad."** We report vendor-default behavior on a single corpus. A tuned config is a separate measurement; vendor PRs are explicitly invited (see [Vendors: PR your tuned config](#vendors-pr-your-tuned-config)).
+- **Not "vendor SDK X is bad."** We report vendor-default behavior on a single corpus. A tuned config is a separate measurement. Send a vendor PR with yours (see [Vendors: PR your tuned config](#vendors-pr-your-tuned-config)).
 - **Not "the systems are comparable today."** N=16 is small, source commits
   and seed counts differ, and v0.2.0 remains planned work.
 - **Not "graph memory is dead."** The snapshot has only four
@@ -74,8 +83,35 @@ supports per-question inspection.
 </p>
 
 <p align="center"><sub><i><code>memory-arena demo</code> serves the bundled
-historical snapshot with no provider keys. The checked-in image predates the
-v0.1.9 trust reset; use the live labels and manifest as authority.</i></sub></p>
+historical snapshot with no provider key. Captured from the v0.1.9 wheel by
+<code>./docs/recapture.sh</code>. The live labels and the manifest stay the
+authority.</i></sub></p>
+
+### Which questions failed, and why
+
+The benchmark table says which strategy scored higher. It does not say why an
+answer was wrong. Recall Lab does.
+
+Pick a strategy, then filter by failure. For `naive_vector`, 7 of 16 questions
+fall under **Correct session, wrong answer**: the strategy retrieved a labelled
+supporting session and the judge still graded the answer at or under 50.
+
+Open one and the record shows the question, the expected answer, the gold
+session, session and turn retrieval, the answer given, the primary judge score
+and rationale, and the structural checks.
+
+<p align="center">
+  <img src="docs/screenshot-failure-lab.png" alt="One question expanded to show the expected answer, the retrieval result, the wrong answer, and the judge rationale" width="900">
+</p>
+
+Question `71017276` asks how many weeks ago the user received a crystal
+chandelier. The expected answer is `4`. `naive_vector` retrieved the gold
+session `answer_0b4a8adc_1` but missed the turn inside it, and answered
+`I do not have that information`. The judge scored it 5 of 100.
+
+That is a reasoning and turn-level retrieval failure, not a session retrieval
+failure. Session recall alone marks it a hit. The failing cut is 50, and the
+API reports it as `judge_fail_threshold` so a reader can check it.
 
 <!-- BENCHMARK_TABLE_START -->
 | Strategy | Recorded accuracy (95% CI when available) | Recall@5 | Direct API cost | Latency | Status |
@@ -136,7 +172,7 @@ LLM judge.
 1. **Structural**, `must_mention`, `must_not_claim`, `max_tokens`
 2. **Sources**, at least one labeled `supporting_session_id` retrieved
 3. **LLM judge**, Opus 4.7 grades 0..100 against the reference
-4. **Eval memo**, identical (answer, reference) pairs cached in-process
+4. **Eval memo**, the same (answer, reference) pair stays cached in-process
 5. **Temporal correctness**, claimed time-marker overlaps the ground-truth window
 6. **Update precision**, answer reflects the latest fact version
 7. **Abstention F1**: F1 over abstention questions. Returns `null` when
@@ -167,7 +203,7 @@ LLM judge.
 
 Both coarse-retrieve `top_k x fanout` candidates from `naive_vector`'s Chroma
 index, then rerank by a quantum-state fidelity. They share the vector store, so
-the retrieval substrate is identical and only the reranking math differs.
+the retrieval substrate is the same and only the reranking math differs.
 
 | Strategy | Backing                  | Notes                                                 |
 | -------- | ------------------------ | ----------------------------------------------------- |
@@ -309,7 +345,7 @@ docker compose up -d neo4j postgres        # baseline (graphiti, memori backends
 docker compose --profile full up -d        # also brings up the api+web containers
 ```
 
-`MEM_ARENA_NEO4J_PASSWORD` is required, compose refuses to start
+`MEM_ARENA_NEO4J_PASSWORD` is needed, compose refuses to start
 without it. Generate one with `openssl rand -hex 16`.
 
 ## Historical v0.1.8 limitations and reproduction
@@ -319,9 +355,9 @@ This section records the limits and smoke-run reproduction values from
 
 ### Snapshot limitations
 
-- **Memori cloud quota.** Memori 3.x routes its augmentation runtime through a cloud quota service that 429s anonymous IPs after a few requests. Set `MEMORI_API_KEY` for full throughput.
+- **Memori cloud quota.** Memori 3.x routes its augmentation runtime through a cloud quota service. That service 429s an anonymous IP after a few requests. Set `MEMORI_API_KEY` for full throughput.
 - **Full-context cost cap.** `full_context` always hits the cost cap on the smoke subset; bump `--cost-cap` to 25+ to evaluate all 16 questions.
-- **Statistical power.** The snapshot contains 16 questions and mixed seed
+- **Statistical power.** The snapshot has 16 questions and mixed seed
   counts. It does not support a current ranking.
 - **Single generator.** Sonnet 4.6 runs the recall-step generation for every strategy that does not pin its own (vendor SDKs use their own internals). A robustness sweep across generators is implemented in [`scripts/robustness.py`](scripts/robustness.py); results to be added in v0.2.
 - **Single judge.** The legacy cross-judge report compares incompatible score
