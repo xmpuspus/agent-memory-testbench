@@ -103,6 +103,16 @@ def _primary_raw_score(record: dict) -> float | None:
     return max(0.0, min(100.0, float(value)))
 
 
+def _ungraded_identity(record: dict, strategy: str, reason: str) -> dict:
+    return {
+        "question_id": record.get("question_id", ""),
+        "strategy": strategy,
+        "seed": record.get("seed"),
+        "status": "ungraded",
+        "reason": reason,
+    }
+
+
 def _spearman(opus_rank: list[int], gpt_rank: list[int]) -> float:
     if len(opus_rank) != len(gpt_rank) or len(opus_rank) < 2:
         return 0.0
@@ -142,24 +152,39 @@ async def main() -> None:
         gpt_scores: list[float] = []
         ungraded_count = 0
         for rec in recs:
-            opus = _primary_raw_score(rec)
-            if opus is None:
+
+            def record_ungraded(reason: str) -> None:
+                nonlocal ungraded_count
                 ungraded_count += 1
                 grade_counts["ungraded"] += 1
+                per_question.append(_ungraded_identity(rec, strategy, reason))
+
+            opus = _primary_raw_score(rec)
+            if opus is None:
+                record_ungraded("missing_primary_raw_score")
                 continue
             qid = rec.get("question_id", "")
             qmeta = questions.get(qid)
             if not qmeta:
+                record_ungraded("missing_question_metadata")
                 continue
-            q = qmeta["question"]
-            ref = qmeta["reference_answer"]
+            q = qmeta.get("question") or ""
+            ref = qmeta.get("reference_answer") or ""
             cand = rec.get("answer") or ""
-            if not q or not ref or not cand:
+            if not q.strip():
+                record_ungraded("blank_question")
+                continue
+            if not ref.strip():
+                record_ungraded("blank_reference_answer")
+                continue
+            if not cand.strip():
+                record_ungraded("blank_candidate_answer")
                 continue
             try:
                 gpt = await _grade_one(client, args.judge, q, ref, cand)
             except Exception as exc:
                 print(f"  [warn] {strategy}: skipped record ({exc})")
+                record_ungraded("secondary_judge_exception")
                 continue
             opus_scores.append(opus)
             gpt_scores.append(float(gpt))

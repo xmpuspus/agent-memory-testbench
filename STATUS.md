@@ -22,6 +22,13 @@ Compatibility notes may refer to legacy result labels and environment variables
 needed to read old artifacts. Those labels are not recommendations for a new
 benchmark run.
 
+## Dependency advisory status
+
+- `npm audit` reports seven high-severity findings in the web dependency tree.
+  They are pending advisory review.
+- v0.1.9 does not change project dependencies; dependency remediation is outside
+  this trust-reset release.
+
 ## Planned work
 
 v0.2.0 is planned work only. Its proposed scope is a controlled benchmark run

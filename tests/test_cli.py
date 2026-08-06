@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 from typer.testing import CliRunner
 
 from memory_arena.cli import app
@@ -106,6 +108,26 @@ class TestReportErrors:
         monkeypatch.setenv("MEM_ARENA_RESULTS_PATH", str(tmp_path / "nope"))
         result = runner.invoke(app, ["report", "--corpus", "longmemeval-s"])
         assert result.exit_code == 1
+
+    def test_report_uses_public_display_name(self, tmp_path, monkeypatch):
+        result_dir = tmp_path / "results"
+        result_dir.mkdir()
+        (result_dir / "test-corpus_bm25_summary.json").write_text(
+            json.dumps(
+                {
+                    "strategy": "bm25",
+                    "accuracy": 0.25,
+                    "abstention_f1": None,
+                    "total_cost_usd": 0.01,
+                }
+            )
+        )
+        monkeypatch.setenv("MEM_ARENA_RESULTS_PATH", str(result_dir))
+
+        result = runner.invoke(app, ["report", "--corpus", "test-corpus"])
+
+        assert result.exit_code == 0
+        assert "Agent Memory Testbench Report" in result.output
 
 
 class TestCorpusSlugValidation:

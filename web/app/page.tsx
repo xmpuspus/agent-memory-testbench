@@ -58,13 +58,25 @@ export default function Home() {
           Agent Memory Testbench
         </h1>
         <p className="text-lg leading-relaxed max-w-3xl" style={{ color: "var(--muted)" }}>
-          Formerly Memory Arena. Which memory architecture works best for your agent? Sixteen
-          systems (Mem0, Graphiti, Cognee, LangMem, Memori, plus
-          pure-Python baselines and advanced retrievers like HyDE, RAPTOR,
-          Reflection, and Karpathy&apos;s LLM Wiki) run on the same
-          LongMemEval corpus, scored by the same evaluator. Empirical
-          evidence, not vendor-tuned numbers.
+          Benchmark agent memory from retrieval to answer.
         </p>
+        <p className="text-sm leading-relaxed max-w-3xl" style={{ color: "var(--muted)" }}>
+          Compare memory architectures, trace where answers fail, and rerun versioned
+          evidence from one open testbench. Formerly Memory Arena.
+        </p>
+        <div
+          className="rounded-lg border p-4 max-w-3xl space-y-1"
+          style={{ borderColor: "var(--border)", background: "var(--card)" }}
+        >
+          <p className="text-sm font-semibold" style={{ color: "var(--foreground)" }}>
+            Bundled snapshot: v0.1.8-bundled-historical
+          </p>
+          <p className="text-xs leading-relaxed" style={{ color: "var(--muted)" }}>
+            Status: historical. 16 strategies, 16 questions, and 4 categories, assembled
+            from mixed source commits and mixed seed counts. Inspect this evidence as a past
+            snapshot, not as a checked or present ranking.
+          </p>
+        </div>
         <div className="flex gap-3 pt-2 flex-wrap">
           <Link
             href="/benchmark"
@@ -85,7 +97,7 @@ export default function Home() {
             className="px-4 py-2 rounded-lg text-sm font-medium border transition-opacity hover:opacity-80"
             style={{ borderColor: "var(--border)", color: "var(--foreground)" }}
           >
-            Leaderboard
+            Historical results
           </Link>
           <a
             href="https://github.com/xmpuspus/memory-arena"
@@ -112,18 +124,18 @@ export default function Home() {
           {[
             {
               step: "1",
-              title: "Same corpus",
-              desc: "All 20 strategies ingest the LongMemEval-S sessions in the same order. Each is namespaced by run id so concurrent runs do not contaminate each other.",
+              title: "Declared corpus",
+              desc: "Choose an explicit question set and record it with the run. The bundled historical evidence uses 16 LongMemEval-S questions.",
             },
             {
               step: "2",
-              title: "7-axis evaluator",
-              desc: "Structural checks, source attribution, LLM judge (Opus), plus three memory-specific axes: temporal correctness, update precision, and abstention F1.",
+              title: "Traceable evaluation",
+              desc: "Inspect retrieval, candidate answers, structural checks, source attribution, and memory-specific evaluation fields.",
             },
             {
               step: "3",
-              title: "Honest cost",
-              desc: "Ingest-side LLM calls (entity extraction, summarization) are tracked separately from recall cost. Most vendor numbers hide ingest cost. Agent Memory Testbench does not.",
+              title: "Direct API cost",
+              desc: "Record direct API cost when it is measurable. Vendor SDK internal calls can remain unknown and must be labeled that way.",
             },
           ].map((item) => (
             <div
@@ -150,10 +162,12 @@ export default function Home() {
 
       <section className="space-y-4">
         <h2 className="text-xl font-semibold" style={{ color: "var(--foreground)" }}>
-          The 20 strategies
+          The 20 registered implementations
         </h2>
         <p className="text-sm" style={{ color: "var(--muted)" }}>
-          Twelve pure-Python baselines and retrievers (vector, BM25, Hybrid RRF,
+          The open testbench registers 20 implementations. The bundled historical
+          results contain only 16 of them. Registered implementations include
+          pure-Python baselines and retrievers (vector, BM25, Hybrid RRF,
           HyDE, Persona Profile, Reflection, RAPTOR, Karpathy&apos;s LLM Wiki,
           A-MEM, HippoRAG 2), two quantum rerankers (QISS, SQR), and six vendor
           SDKs (Mem0, Graphiti, Graphiti-on-FalkorDB, Cognee, LangMem, Memori).

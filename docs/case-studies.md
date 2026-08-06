@@ -17,6 +17,7 @@ Treat the answer and retrieval fields as observations from that historical run.
 **Question:** How many Korean restaurants have I tried in my city?
 
 **Category:** `knowledge_update`
+
 **Historical reference answer:** `four`
 
 This example is kept to inspect how the bundled run handled an attribute in
@@ -39,6 +40,7 @@ and session recall at 5.
 **Question:** Where did Rachel move to after her recent relocation?
 
 **Category:** `knowledge_update`
+
 **Historical reference answer:** `the suburbs`
 
 The source conversations contain an earlier and a later location. Use this case
@@ -61,6 +63,7 @@ and session recall at 5.
 **Question:** What degree did I graduate with?
 
 **Category:** `information_extraction`
+
 **Historical reference answer:** `Business Administration`
 
 This is a single-fact retrieval example. It is suitable for inspecting an
@@ -84,6 +87,7 @@ and session recall at 5.
 **Question:** How long is my daily commute to work?
 
 **Category:** `information_extraction`
+
 **Historical reference answer:** `45 minutes each way`
 
 This example exposes differences among historical retrieved material and

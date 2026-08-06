@@ -3,7 +3,7 @@
 CI rule: README + docs/*.md + CONTRIBUTING.md must not contain:
   - em-dashes (U+2014). Use ", " or ": " or "." instead.
   - en-dashes (U+2013) in narrative text. Use "-" for number ranges too.
-  - the literal phrase "16 agent-memory architectures" (current count is 19).
+  - the literal phrase "16 agent-memory architectures" (20 are registered).
 
 The single file `docs/per-question-comparison.md` is exempt because it
 quotes LLM output verbatim; the LLM emits em-dashes and rewriting them
@@ -43,11 +43,7 @@ BANNED_TYPOGRAPHY = {
 BANNED_PHRASES = [
     (
         "16 agent-memory architectures",
-        "current count is 19; update to '19 agent-memory architectures'",
-    ),
-    (
-        "16 strategies",
-        "current count is 19 (where the claim applies; check carefully)",
+        "20 implementations are registered; reserve 16 for the historical snapshot",
     ),
 ]
 

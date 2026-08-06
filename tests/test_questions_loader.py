@@ -134,6 +134,13 @@ class TestLoadMemoryQuestions:
         records = load_memory_questions("any", subset=str(d))
         assert len(records) == 2
 
+    def test_unknown_named_subset_is_rejected(self, tmp_path, monkeypatch):
+        _build_dataset(tmp_path)
+        monkeypatch.chdir(tmp_path)
+
+        with pytest.raises(ValueError, match="Unknown question subset 'typo'"):
+            load_memory_questions("longmemeval-s", subset="typo")
+
     def test_full_falls_back_to_yaml_dir(self, tmp_path, monkeypatch):
         base = tmp_path / "datasets" / "c" / "questions"
         base.mkdir(parents=True)

@@ -23,10 +23,10 @@ historical evidence and exercise local report paths.
 
 ## What does the cross-judge report prove?
 
-It records a historical comparison of raw judge scores for the bundled data.
-It is not evidence of a current ordering or of a provider-independent result.
-New runs should keep raw scores, find missing grades, and compare judges
-under a declared protocol.
+Nothing. The legacy cross-judge report is invalid for claims because it compared
+incompatible score semantics. It remains quarantined only as invalid legacy
+evidence. New runs should keep equivalent raw scores, find every ungraded
+record, and compare judges under a declared protocol.
 
 ## Why are vendor costs difficult to compare?
 

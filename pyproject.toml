@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "memory-arena"
 dynamic = ["version"]
-description = "Benchmark 20 agent-memory strategies (Mem0, Graphiti, Graphiti-on-FalkorDB, Cognee, LangMem, Memori, Karpathy LLM Wiki, A-MEM, HippoRAG 2, quantum rerankers, plus pure-Python baselines and advanced retrievers) on the same evaluator under the same configs"
+description = "Open testbench for agent-memory evaluation with inspectable historical evidence"
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.11"

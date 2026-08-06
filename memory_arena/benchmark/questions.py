@@ -127,6 +127,12 @@ def load_memory_questions(
         if custom.is_dir():
             return _load_yaml_dir(custom)
 
+    if subset not in {"preflight", "smoke"}:
+        raise ValueError(
+            f"Unknown question subset {subset!r}. Expected preflight, "
+            "historical-v0.1.8, full, smoke, or an existing YAML file/directory path."
+        )
+
     # On-disk layout uses smoke_synthetic/ (the bundled LongMemEval-S subset
     # of synthetic abstention questions); older corpora may still use smoke/.
     smoke_dir = base / "questions" / "smoke_synthetic"
